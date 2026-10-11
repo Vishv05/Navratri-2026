@@ -33,9 +33,8 @@ export const FIRESTORE_SETTINGS = {
  * Hash of "2026": 158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab
  */
 export const COMMITTEE_CONFIG = {
-  // Set to true to require PIN before any selection, change, or reset
-  // Set to false if you want anyone visiting the page to be able to select freely
-  requirePinForEdits: true,
+  // Set to false: Anyone visiting the page can select freely with zero PIN prompts
+  requirePinForEdits: false,
 
   // SHA-256 hash of "2026"
   pinHash: "158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab",

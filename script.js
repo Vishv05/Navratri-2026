@@ -55,9 +55,6 @@ const DOM = {
   liveStatusBadge: document.getElementById("live-status-badge"),
   liveStatusText: document.getElementById("live-status-text"),
   liveDot: document.querySelector(".live-dot"),
-  committeeToggleBtn: document.getElementById("committee-toggle-btn"),
-  committeeLockIcon: document.getElementById("committee-lock-icon"),
-  committeeLockText: document.getElementById("committee-lock-text"),
   themeToggleBtn: document.getElementById("theme-toggle-btn"),
   themeIcon: document.getElementById("theme-icon"),
   sharePageBtn: document.getElementById("share-page-btn"),
@@ -75,29 +72,7 @@ const DOM = {
   countdownGrid: document.getElementById("countdown-timer-grid"),
   todayBanner: document.getElementById("today-aarti-banner"),
   todayBannerText: document.getElementById("today-banner-text"),
-  // Modals
-  pinModal: document.getElementById("pin-modal"),
-  pinInput: document.getElementById("committee-pin-input"),
-  pinErrorMsg: document.getElementById("pin-error-msg"),
-  pinSubmitBtn: document.getElementById("pin-submit-btn"),
-  pinCancelBtn: document.getElementById("pin-cancel-btn"),
-  pinCloseBtn: document.getElementById("pin-modal-close"),
-  // Aarti Selection Confirmation & Automated WhatsApp Modal
-  assignModal: document.getElementById("assign-confirm-modal"),
-  assignCloseBtn: document.getElementById("assign-confirm-close"),
-  confirmHouseHighlight: document.getElementById("confirm-house-highlight"),
-  confirmDateHighlight: document.getElementById("confirm-date-highlight"),
-  confirmCardHouse: document.getElementById("confirm-card-house"),
-  confirmCardNorata: document.getElementById("confirm-card-norata"),
-  confirmCardDate: document.getElementById("confirm-card-date"),
-  confirmPhone1: document.getElementById("confirm-phone-1"),
-  confirmPhone2: document.getElementById("confirm-phone-2"),
-  confirmPreview: document.getElementById("confirm-message-preview"),
-  confirmCopyBtn: document.getElementById("confirm-copy-btn"),
-  confirmErrorMsg: document.getElementById("confirm-error-msg"),
-  confirmModalActions: document.getElementById("confirm-modal-actions"),
-  confirmCancelBtn: document.getElementById("confirm-cancel-btn"),
-  confirmSubmitBtn: document.getElementById("confirm-submit-btn"),
+  // Reset Confirmation Dialog
   resetModal: document.getElementById("reset-confirm-modal"),
   resetConfirmBtn: document.getElementById("reset-confirm-btn"),
   resetCancelBtn: document.getElementById("reset-cancel-btn"),
@@ -260,11 +235,6 @@ function loadCachedAssignments() {
    TRANSACTIONAL SAVE / EDIT WITH CONCURRENCY PROTECTION
    ========================================================================== */
 async function performHouseAssignment(dayNum, houseNo) {
-  if (COMMITTEE_CONFIG.requirePinForEdits && !STATE.isCommitteeUnlocked) {
-    requestCommitteePin({ type: "assign", dayNum, houseNo });
-    return;
-  }
-
   if (STATE.isFirebaseActive && STATE.db) {
     try {
       showToast(`Saving ${houseNo || 'clear'} for Day ${dayNum}...`, "info");
@@ -474,22 +444,6 @@ function createAssignedBadge(dayNum, houseNo) {
   return badgeContainer;
 }
 
-let currentPromptContext = null;
-
-function createWhatsAppButton(dayNum, houseNo) {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "wa-reminder-btn";
-  btn.setAttribute("aria-label", `Send WhatsApp reminder to ${houseNo}`);
-  btn.innerHTML = `<span>💬</span> <span>WhatsApp Reminder</span>`;
-
-  btn.addEventListener("click", () => {
-    openAssignmentConfirmationModal(dayNum, houseNo);
-  });
-
-  return btn;
-}
-
 /**
  * Universal safe WhatsApp redirect that works on desktop, mobile, and handles pop-up blockers
  */
@@ -506,197 +460,73 @@ function openWhatsAppUrl(url) {
 }
 
 /**
- * Prompt user before assigning house and sending automated WhatsApp reminder
+ * Sends a WhatsApp Aarti reminder directly to the WhatsApp Number linked with House No. in data.js.
+ * Zero pop-ups!
  */
-function promptHouseAssignment(dayNum, houseNo) {
-  if (COMMITTEE_CONFIG.requirePinForEdits && !STATE.isCommitteeUnlocked) {
-    requestCommitteePin({ type: "assign_prompt", dayNum, houseNo });
-    return;
-  }
-  openAssignmentConfirmationModal(dayNum, houseNo);
-}
-
-/**
- * Opens the bilingual confirmation modal asking the user to confirm that
- * House No. will receive the WhatsApp reminder for their Aarti on their respective date.
- */
-function openAssignmentConfirmationModal(dayNum, houseNo) {
-  const day = SCHEDULE.find(d => d.dayNum === dayNum);
-  if (!day) return;
-
-  currentPromptContext = { dayNum, houseNo, day };
-
-  // Fetch linked contact numbers (from localStorage or defaults)
-  const contact = getHouseContacts(houseNo);
-  const phones = extractPhoneNumbers(contact);
-
-  // Update notification banner (As explicitly requested by user)
-  DOM.confirmHouseHighlight.textContent = houseNo;
-  DOM.confirmDateHighlight.textContent = `${day.dateStr} - ${day.norataGu}`;
-
-  // Update details card
-  DOM.confirmCardHouse.textContent = houseNo;
-  DOM.confirmCardNorata.innerHTML = `${day.norataEn} <span style="font-size: 0.85em; opacity: 0.9;">(${day.norataGu})</span>`;
-  DOM.confirmCardDate.textContent = `${day.dateStr} [${day.dayName}]`;
-
-  // Pre-fill phone number inputs
-  let p1Val = "";
-  let p2Val = "";
-  if (phones.length >= 1) {
-    p1Val = phones[0].startsWith("91") ? phones[0].slice(2) : phones[0];
-  }
-  if (phones.length >= 2) {
-    p2Val = phones[1].startsWith("91") ? phones[1].slice(2) : phones[1];
-  }
-  DOM.confirmPhone1.value = p1Val;
-  DOM.confirmPhone2.value = p2Val;
-
-  // Build message preview
-  const message = buildWhatsAppMessage(dayNum, houseNo);
-  DOM.confirmPreview.value = message;
-
-  // Clear any errors
-  DOM.confirmErrorMsg.classList.add("hidden");
-  DOM.confirmErrorMsg.textContent = "";
-
-  // Render responsive action buttons
-  updatePromptActionButtons();
-
-  // Open modal
-  DOM.assignModal.showModal();
-}
-
-/**
- * Dynamically re-renders the action buttons based on phone numbers entered in Phone 1 & Phone 2
- */
-function updatePromptActionButtons() {
-  if (!currentPromptContext) return;
-  const { dayNum, houseNo } = currentPromptContext;
-
-  const raw1 = DOM.confirmPhone1.value.trim().replace(/[^0-9]/g, "");
-  const raw2 = DOM.confirmPhone2.value.trim().replace(/[^0-9]/g, "");
-
-  const p1 = raw1 ? (raw1.length === 10 ? "91" + raw1 : raw1) : null;
-  const p2 = raw2 ? (raw2.length === 10 ? "91" + raw2 : raw2) : null;
-
-  DOM.confirmModalActions.innerHTML = "";
-
-  // Cancel Button
-  const cancelBtn = document.createElement("button");
-  cancelBtn.type = "button";
-  cancelBtn.className = "btn btn-secondary";
-  cancelBtn.textContent = "✕ રદ કરો (Cancel)";
-  cancelBtn.addEventListener("click", () => {
-    DOM.assignModal.close();
-    showToast("પસંદગી રદ કરવામાં આવી.", "info");
-  });
-  DOM.confirmModalActions.appendChild(cancelBtn);
-
-  if (p1 && p2) {
-    // Both phone numbers available: Provide 1-tap options for Number 1, Number 2, or Both!
-    const btn1 = document.createElement("button");
-    btn1.type = "button";
-    btn1.className = "btn btn-whatsapp";
-    btn1.innerHTML = `<span>📱 નંબર ૧ (${formatPhoneDisplay(p1)}) પર મોકલો 🚀</span>`;
-    btn1.addEventListener("click", () => {
-      confirmAndExecuteAssignment(dayNum, houseNo, [p1]);
-    });
-    DOM.confirmModalActions.appendChild(btn1);
-
-    const btn2 = document.createElement("button");
-    btn2.type = "button";
-    btn2.className = "btn btn-whatsapp";
-    btn2.innerHTML = `<span>📱 નંબર ૨ (${formatPhoneDisplay(p2)}) પર મોકલો 🚀</span>`;
-    btn2.addEventListener("click", () => {
-      confirmAndExecuteAssignment(dayNum, houseNo, [p2]);
-    });
-    DOM.confirmModalActions.appendChild(btn2);
-
-    const btnBoth = document.createElement("button");
-    btnBoth.type = "button";
-    btnBoth.className = "btn btn-primary";
-    btnBoth.innerHTML = `<span>🌟 બંને નંબર પર મોકલો (Send Both) 🚀</span>`;
-    btnBoth.addEventListener("click", () => {
-      confirmAndExecuteAssignment(dayNum, houseNo, [p1, p2]);
-    });
-    DOM.confirmModalActions.appendChild(btnBoth);
-
-  } else {
-    // 1 number or user typed number
-    const submitBtn = document.createElement("button");
-    submitBtn.type = "button";
-    submitBtn.className = "btn btn-whatsapp";
-    const labelNum = p1 ? ` (${formatPhoneDisplay(p1)})` : "";
-    submitBtn.innerHTML = `<span>✅ કન્ફર્મ કરો અને WhatsApp મોકલો${labelNum} 🚀</span>`;
-    submitBtn.addEventListener("click", () => {
-      const activeRaw1 = DOM.confirmPhone1.value.trim().replace(/[^0-9]/g, "");
-      const activeRaw2 = DOM.confirmPhone2.value.trim().replace(/[^0-9]/g, "");
-      const targets = [];
-      if (activeRaw1) targets.push(activeRaw1.length === 10 ? "91" + activeRaw1 : activeRaw1);
-      if (activeRaw2) targets.push(activeRaw2.length === 10 ? "91" + activeRaw2 : activeRaw2);
-      confirmAndExecuteAssignment(dayNum, houseNo, targets);
-    });
-    DOM.confirmModalActions.appendChild(submitBtn);
-  }
-}
-
-/**
- * Saves assignment to Firestore and automatically triggers WhatsApp redirect
- */
-async function confirmAndExecuteAssignment(dayNum, houseNo, phoneTargets) {
-  // 1. Save entered phone numbers to persistent storage
-  const p1Raw = DOM.confirmPhone1.value.trim();
-  const p2Raw = DOM.confirmPhone2.value.trim();
-  const combinedContacts = [p1Raw, p2Raw].filter(Boolean).join(" / ");
-  if (combinedContacts) {
-    saveHouseContacts(houseNo, combinedContacts);
-  }
-
-  // 2. Perform the assignment (syncs to Firestore & updates UI)
-  await performHouseAssignment(dayNum, houseNo);
-
-  // 3. Build WhatsApp message
+function sendWhatsAppToHouse(dayNum, houseNo) {
+  if (!houseNo) return;
+  const rawContact = HOUSE_CONTACTS[houseNo];
+  const phones = extractPhoneNumbers(rawContact);
   const message = buildWhatsAppMessage(dayNum, houseNo);
 
-  // 4. Automatically trigger WhatsApp send
-  if (phoneTargets && phoneTargets.length > 0) {
-    const firstPhone = phoneTargets[0];
-    const waUrl1 = `https://api.whatsapp.com/send?phone=${firstPhone}&text=${encodeURIComponent(message)}`;
-    
-    showToast(`🚀 મકાન નં. ${houseNo} માટે WhatsApp ખૂલી રહ્યું છે: ${formatPhoneDisplay(firstPhone)}`, "success");
-    openWhatsAppUrl(waUrl1);
+  if (phones.length > 0) {
+    const primaryPhone = phones[0];
+    const waUrl = `https://api.whatsapp.com/send?phone=${primaryPhone}&text=${encodeURIComponent(message)}`;
+    showToast(`🚀 મકાન નં. ${houseNo} (+${primaryPhone}) માટે WhatsApp ખૂલી રહ્યું છે...`, "success");
+    openWhatsAppUrl(waUrl);
 
-    // If second phone requested, show persistent quick-trigger for number 2
-    if (phoneTargets.length > 1) {
-      const secondPhone = phoneTargets[1];
+    // If house has 2 phone numbers in data.js, provide quick floating trigger for number 2 without popup
+    if (phones.length > 1) {
+      const secondPhone = phones[1];
       const waUrl2 = `https://api.whatsapp.com/send?phone=${secondPhone}&text=${encodeURIComponent(message)}`;
       setTimeout(() => {
-        showToast(`📲 નંબર ૨ (${formatPhoneDisplay(secondPhone)}) માટે WhatsApp મોકલવા અહીં ક્લિક કરો`, "info");
-        const notifyBtn = document.createElement("button");
-        notifyBtn.className = "btn btn-whatsapp";
-        notifyBtn.style.position = "fixed";
-        notifyBtn.style.bottom = "80px";
-        notifyBtn.style.right = "20px";
-        notifyBtn.style.zIndex = "9999";
-        notifyBtn.style.boxShadow = "0 6px 20px rgba(0,0,0,0.5)";
-        notifyBtn.innerHTML = `📱 નંબર ૨ પર પણ મોકલો (${formatPhoneDisplay(secondPhone)}) 🚀`;
-        notifyBtn.onclick = () => {
+        showToast(`📲 નંબર ૨ (+${secondPhone}) પર પણ મોકલવા અહીં ક્લિક કરો`, "info");
+        const quickBtn = document.createElement("button");
+        quickBtn.className = "btn btn-whatsapp";
+        quickBtn.style.position = "fixed";
+        quickBtn.style.bottom = "80px";
+        quickBtn.style.right = "20px";
+        quickBtn.style.zIndex = "9999";
+        quickBtn.style.boxShadow = "0 6px 20px rgba(0,0,0,0.5)";
+        quickBtn.innerHTML = `📱 નંબર ૨ પર પણ મોકલો (+${secondPhone}) 🚀`;
+        quickBtn.onclick = () => {
           openWhatsAppUrl(waUrl2);
-          notifyBtn.remove();
+          quickBtn.remove();
         };
-        document.body.appendChild(notifyBtn);
-        setTimeout(() => notifyBtn.remove(), 12000);
-      }, 1500);
+        document.body.appendChild(quickBtn);
+        setTimeout(() => quickBtn.remove(), 12000);
+      }, 1200);
     }
   } else {
-    // If no phone number was entered, open universal WhatsApp selector so user can pick contact
+    // If placeholder like 91XXXXXXXXXX or no digits in data.js, open universal WhatsApp URL with message so user can choose contact
     const universalUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
-    showToast(`WhatsApp તરફ લઈ જઈ રહ્યું છે (સંપર્ક પસંદ કરો)...`, "info");
+    showToast(`WhatsApp ખૂલી રહ્યું છે (સંપર્ક પસંદ કરો)...`, "info");
     openWhatsAppUrl(universalUrl);
   }
+}
 
-  // Close modal
-  DOM.assignModal.close();
+function createWhatsAppButton(dayNum, houseNo) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "wa-reminder-btn";
+  btn.setAttribute("aria-label", `Send WhatsApp reminder to ${houseNo}`);
+  btn.innerHTML = `<span>💬</span> <span>WhatsApp Reminder</span>`;
+
+  btn.addEventListener("click", () => {
+    sendWhatsAppToHouse(dayNum, houseNo);
+  });
+
+  return btn;
+}
+
+function selectHouseAndSendWhatsApp(dayNum, houseNo) {
+  // 1. Immediately assign house to that day (syncs with Firestore)
+  performHouseAssignment(dayNum, houseNo);
+
+  // 2. Immediately send WhatsApp message to the number linked in data.js
+  if (houseNo) {
+    sendWhatsAppToHouse(dayNum, houseNo);
+  }
 }
 
 function createCustomDropdown(dayNum, assignedHousesMap) {
@@ -746,14 +576,14 @@ function createCustomDropdown(dayNum, assignedHousesMap) {
       option.addEventListener("click", (e) => {
         e.stopPropagation();
         closeAllDropdowns();
-        promptHouseAssignment(dayNum, house);
+        selectHouseAndSendWhatsApp(dayNum, house);
       });
 
       option.addEventListener("keydown", (e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           closeAllDropdowns();
-          promptHouseAssignment(dayNum, house);
+          selectHouseAndSendWhatsApp(dayNum, house);
         }
       });
     }
@@ -818,104 +648,7 @@ function initGlobalClickHandlers() {
   });
 }
 
-/* ==========================================================================
 
-
-/* ==========================================================================
-   COMMITTEE PIN SECURITY (CLIENT-SIDE PREVENTION)
-   ========================================================================== */
-function requestCommitteePin(action) {
-  STATE.pendingAction = action;
-  DOM.pinInput.value = "";
-  DOM.pinErrorMsg.classList.add("hidden");
-  DOM.pinModal.showModal();
-  setTimeout(() => DOM.pinInput.focus(), 100);
-}
-
-async function computeSha256(str) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(str.trim());
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function verifyCommitteePin() {
-  const enteredPin = DOM.pinInput.value.trim();
-  if (!enteredPin) {
-    DOM.pinErrorMsg.textContent = "કૃપા કરીને PIN દાખલ કરો.";
-    DOM.pinErrorMsg.classList.remove("hidden");
-    return;
-  }
-
-  try {
-    const computedHash = await computeSha256(enteredPin);
-
-    if (computedHash === COMMITTEE_CONFIG.pinHash) {
-      STATE.isCommitteeUnlocked = true;
-      sessionStorage.setItem(COMMITTEE_CONFIG.sessionKey, "true");
-      updateCommitteeToolbarState(true);
-      DOM.pinModal.close();
-      showToast("🔓 કમિટી મોડ સક્રિય થયો! (Committee Unlocked)", "success");
-
-      if (STATE.pendingAction) {
-        const action = STATE.pendingAction;
-        STATE.pendingAction = null;
-        if (action.type === "assign") {
-          performHouseAssignment(action.dayNum, action.houseNo);
-        } else if (action.type === "assign_prompt") {
-          openAssignmentConfirmationModal(action.dayNum, action.houseNo);
-        } else if (action.type === "reset") {
-          DOM.resetModal.showModal();
-        }
-      }
-    } else {
-      DOM.pinErrorMsg.textContent = "ખોટો પિન! કૃપા કરીને ફરી પ્રયાસ કરો. (Incorrect PIN)";
-      DOM.pinErrorMsg.classList.remove("hidden");
-      const card = DOM.pinModal.querySelector(".modal-card");
-      if (card) {
-        card.classList.remove("shake");
-        void card.offsetWidth;
-        card.classList.add("shake");
-      }
-    }
-  } catch (e) {
-    console.error("Crypto error:", e);
-    if (enteredPin === "2026") {
-      STATE.isCommitteeUnlocked = true;
-      sessionStorage.setItem(COMMITTEE_CONFIG.sessionKey, "true");
-      updateCommitteeToolbarState(true);
-      DOM.pinModal.close();
-      showToast("🔓 Committee Unlocked!", "success");
-
-      if (STATE.pendingAction) {
-        const action = STATE.pendingAction;
-        STATE.pendingAction = null;
-        if (action.type === "assign") {
-          performHouseAssignment(action.dayNum, action.houseNo);
-        } else if (action.type === "assign_prompt") {
-          openAssignmentConfirmationModal(action.dayNum, action.houseNo);
-        } else if (action.type === "reset") {
-          DOM.resetModal.showModal();
-        }
-      }
-    }
-  }
-}
-
-function updateCommitteeToolbarState(unlocked) {
-  if (unlocked) {
-    DOM.committeeLockIcon.textContent = "🔓";
-    DOM.committeeLockText.textContent = "Committee: Unlocked";
-    DOM.committeeToggleBtn.title = "Committee edit mode is active for this session. Click to lock again.";
-    DOM.committeeToggleBtn.style.borderColor = "var(--status-live)";
-  } else {
-    DOM.committeeLockIcon.textContent = "🔒";
-    DOM.committeeLockText.textContent = "Committee: View Mode";
-    DOM.committeeToggleBtn.title = "Click to enter Committee PIN and enable editing";
-    DOM.committeeToggleBtn.style.borderColor = "var(--gold-border)";
-  }
-}
 
 /* ==========================================================================
    COUNTDOWN TIMER & TODAY'S AARTI HIGHLIGHT
@@ -1009,18 +742,6 @@ function initLogoFallback() {
 function initHeaderToolbar() {
   DOM.themeToggleBtn.addEventListener("click", toggleTheme);
 
-  updateCommitteeToolbarState(STATE.isCommitteeUnlocked);
-  DOM.committeeToggleBtn.addEventListener("click", () => {
-    if (STATE.isCommitteeUnlocked) {
-      STATE.isCommitteeUnlocked = false;
-      sessionStorage.removeItem(COMMITTEE_CONFIG.sessionKey);
-      updateCommitteeToolbarState(false);
-      showToast("🔒 Committee mode locked. Viewing mode active.", "info");
-    } else {
-      requestCommitteePin(null);
-    }
-  });
-
   DOM.sharePageBtn.addEventListener("click", () => {
     const shareData = {
       title: `${SOCIETY_INFO.name} - ${SOCIETY_INFO.eventTitle}`,
@@ -1042,41 +763,11 @@ function initHeaderToolbar() {
   });
 
   DOM.resetAllBtn.addEventListener("click", () => {
-    if (COMMITTEE_CONFIG.requirePinForEdits && !STATE.isCommitteeUnlocked) {
-      requestCommitteePin({ type: "reset" });
-    } else {
-      DOM.resetModal.showModal();
-    }
+    DOM.resetModal.showModal();
   });
 }
 
 function initModals() {
-  DOM.pinSubmitBtn.addEventListener("click", verifyCommitteePin);
-  DOM.pinInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") verifyCommitteePin();
-  });
-  DOM.pinCancelBtn.addEventListener("click", () => DOM.pinModal.close());
-  DOM.pinCloseBtn.addEventListener("click", () => DOM.pinModal.close());
-
-  // Aarti selection confirmation & automated WhatsApp modal
-  DOM.assignCloseBtn.addEventListener("click", () => {
-    DOM.assignModal.close();
-    showToast("પસંદગી રદ કરવામાં આવી.", "info");
-  });
-  DOM.confirmCancelBtn.addEventListener("click", () => {
-    DOM.assignModal.close();
-    showToast("પસંદગી રદ કરવામાં આવી.", "info");
-  });
-  DOM.confirmCopyBtn.addEventListener("click", () => {
-    navigator.clipboard.writeText(DOM.confirmPreview.value)
-      .then(() => showToast("📋 મેસેજ ક્લિપબોર્ડ પર કોપી થયો!", "success"))
-      .catch(() => showToast("મેસેજ કોપી કરવામાં ભૂલ થઈ.", "error"));
-  });
-
-  // Re-calculate button states on typing mobile numbers
-  DOM.confirmPhone1.addEventListener("input", updatePromptActionButtons);
-  DOM.confirmPhone2.addEventListener("input", updatePromptActionButtons);
-
   DOM.resetConfirmBtn.addEventListener("click", () => {
     DOM.resetModal.close();
     performResetAll();
