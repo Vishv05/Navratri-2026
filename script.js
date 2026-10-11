@@ -464,10 +464,97 @@ function createWhatsAppButton(dayNum, houseNo) {
   btn.innerHTML = `<span>💬</span> <span>WhatsApp Reminder</span>`;
 
   btn.addEventListener("click", () => {
-    openWhatsAppDialog(dayNum, houseNo);
+    handleWhatsAppReminderAction(dayNum, houseNo);
   });
 
   return btn;
+}
+
+/**
+ * Universal safe WhatsApp redirect that works on desktop, mobile, and handles pop-up blockers
+ */
+function openWhatsAppUrl(url) {
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobile) {
+    window.location.href = url;
+  } else {
+    const win = window.open(url, "_blank", "noopener,noreferrer");
+    if (!win || win.closed || typeof win.closed === "undefined") {
+      window.location.href = url;
+    }
+  }
+}
+
+/**
+ * Handles WhatsApp Reminder button click:
+ * - 1 phone number: Directly redirects to that number in WhatsApp!
+ * - 0 numbers / placeholder: Directly opens WhatsApp with message prefilled!
+ * - 2+ phone numbers: Opens quick modal to choose Number 1 or Number 2 with 1 tap.
+ */
+function handleWhatsAppReminderAction(dayNum, houseNo) {
+  const day = SCHEDULE.find(d => d.dayNum === dayNum);
+  const rawContact = HOUSE_CONTACTS[houseNo];
+  const phones = extractPhoneNumbers(rawContact);
+  const message = buildWhatsAppMessage(dayNum, houseNo);
+
+  // Case 1: Exactly 1 valid phone number -> IMMEDIATELY REDIRECT TO WHATSAPP
+  if (phones.length === 1) {
+    const singlePhone = phones[0];
+    const waUrl = `https://wa.me/${singlePhone}?text=${encodeURIComponent(message)}`;
+    showToast(`WhatsApp તરફ લઈ જઈ રહ્યું છે: +${singlePhone}...`, "success");
+    openWhatsAppUrl(waUrl);
+    return;
+  }
+
+  // Case 2: 2 or more phone numbers -> Show modal so user can tap Number 1 or Number 2
+  if (phones.length >= 2) {
+    openWhatsAppMultiModal(day, houseNo, phones, message);
+    return;
+  }
+
+  // Case 3: No number configured in data.js -> Redirect to WhatsApp contact selector
+  const universalUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+  showToast(`WhatsApp તરફ લઈ જઈ રહ્યું છે (સંપર્ક પસંદ કરો)...`, "info");
+  openWhatsAppUrl(universalUrl);
+}
+
+function openWhatsAppMultiModal(day, houseNo, phones, message) {
+  DOM.waModalHouse.textContent = houseNo;
+  DOM.waModalDate.textContent = `${day.norata} (${day.dateStr})`;
+  DOM.waPreview.value = message;
+
+  DOM.waModalPhone.innerHTML = phones.map((p, idx) => `
+    <span class="phone-tag" style="margin-right: 6px;">નંબર ${idx + 1}: +${p}</span>
+  `).join("<br>");
+
+  DOM.waModalActions.innerHTML = "";
+
+  const copyBtn = document.createElement("button");
+  copyBtn.type = "button";
+  copyBtn.className = "btn btn-secondary";
+  copyBtn.innerHTML = "મેસેજ કોપી કરો (Copy)";
+  copyBtn.addEventListener("click", () => {
+    navigator.clipboard.writeText(DOM.waPreview.value)
+      .then(() => showToast("📋 મેસેજ ક્લિપબોર્ડ પર કોપી થયો!", "success"))
+      .catch(() => showToast("મેસેજ કોપી કરવામાં ભૂલ થઈ.", "error"));
+  });
+  DOM.waModalActions.appendChild(copyBtn);
+
+  phones.forEach((p, idx) => {
+    const waUrl = `https://wa.me/${p}?text=${encodeURIComponent(message)}`;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn btn-whatsapp";
+    btn.style.whiteSpace = "normal";
+    btn.innerHTML = `📱 WhatsApp: +${p} (નંબર ${idx + 1}) 🚀`;
+    btn.addEventListener("click", () => {
+      openWhatsAppUrl(waUrl);
+      DOM.waModal.close();
+    });
+    DOM.waModalActions.appendChild(btn);
+  });
+
+  DOM.waModal.showModal();
 }
 
 function createCustomDropdown(dayNum, assignedHousesMap) {
@@ -590,102 +677,7 @@ function initGlobalClickHandlers() {
 }
 
 /* ==========================================================================
-   WHATSAPP REMINDER INTEGRATION (Supports 1 or 2 Phone Numbers, No 404s!)
-   ========================================================================== */
-/**
- * Opens WhatsApp preview modal and generates 100% valid WhatsApp links
- * Handles 1 number, 2 numbers, or general contact selection cleanly.
- */
-function openWhatsAppDialog(dayNum, houseNo) {
-  const day = SCHEDULE.find(d => d.dayNum === dayNum);
-  const rawContact = HOUSE_CONTACTS[houseNo];
-  const phones = extractPhoneNumbers(rawContact);
-  const message = buildWhatsAppMessage(dayNum, houseNo);
 
-  DOM.waModalHouse.textContent = houseNo;
-  DOM.waModalDate.textContent = `${day.norata} (${day.dateStr})`;
-  DOM.waPreview.value = message;
-
-  // Clear previous dynamic buttons
-  DOM.waModalActions.innerHTML = "";
-
-  // Copy button (always available)
-  const copyBtn = document.createElement("button");
-  copyBtn.type = "button";
-  copyBtn.className = "btn btn-secondary";
-  copyBtn.innerHTML = "મેસેજ કોપી કરો (Copy)";
-  copyBtn.addEventListener("click", () => {
-    navigator.clipboard.writeText(DOM.waPreview.value)
-      .then(() => showToast("📋 મેસેજ ક્લિપબોર્ડ પર કોપી થયો!", "success"))
-      .catch(() => showToast("મેસેજ કોપી કરવામાં ભૂલ થઈ.", "error"));
-  });
-
-  if (phones.length === 0) {
-    // Case 0: No phone number or placeholder in data.js
-    DOM.waModalPhone.innerHTML = `<span style="color:var(--status-warning);">નંબર નોંધાયેલ નથી (data.js)</span>`;
-    showToast(`⚠️ ${houseNo} માટે WhatsApp નંબર data.js માં હજુ નોંધાયેલ નથી.`, "info");
-
-    // Use official universal WhatsApp send endpoint so user can select any contact without 404
-    const universalUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
-
-    const openBtn = document.createElement("button");
-    openBtn.type = "button";
-    openBtn.className = "btn btn-whatsapp";
-    openBtn.innerHTML = "WhatsApp ખોલો (સંપર્ક પસંદ કરો) 🚀";
-    openBtn.addEventListener("click", () => {
-      window.open(universalUrl, "_blank", "noopener,noreferrer");
-      DOM.waModal.close();
-    });
-
-    DOM.waModalActions.appendChild(copyBtn);
-    DOM.waModalActions.appendChild(openBtn);
-
-  } else if (phones.length === 1) {
-    // Case 1: Exactly 1 valid phone number
-    const singlePhone = phones[0];
-    DOM.waModalPhone.innerHTML = `<span class="phone-tag">+${singlePhone}</span>`;
-
-    const waUrl = `https://wa.me/${singlePhone}?text=${encodeURIComponent(message)}`;
-
-    const openBtn = document.createElement("button");
-    openBtn.type = "button";
-    openBtn.className = "btn btn-whatsapp";
-    openBtn.innerHTML = `WhatsApp ખોલો (+${singlePhone}) 🚀`;
-    openBtn.addEventListener("click", () => {
-      window.open(waUrl, "_blank", "noopener,noreferrer");
-      DOM.waModal.close();
-    });
-
-    DOM.waModalActions.appendChild(copyBtn);
-    DOM.waModalActions.appendChild(openBtn);
-
-  } else {
-    // Case 2: House has 2 (or more) phone numbers!
-    // Display both phone numbers clearly
-    DOM.waModalPhone.innerHTML = phones.map((p, idx) => `
-      <span class="phone-tag" style="margin-right: 6px;">નંબર ${idx + 1}: +${p}</span>
-    `).join("<br>");
-
-    DOM.waModalActions.appendChild(copyBtn);
-
-    // Create a dedicated button for EACH phone number to prevent 404s!
-    phones.forEach((p, idx) => {
-      const waUrl = `https://wa.me/${p}?text=${encodeURIComponent(message)}`;
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "btn btn-whatsapp";
-      btn.style.whiteSpace = "normal";
-      btn.innerHTML = `📱 WhatsApp: +${p} (નંબર ${idx + 1}) 🚀`;
-      btn.addEventListener("click", () => {
-        window.open(waUrl, "_blank", "noopener,noreferrer");
-        DOM.waModal.close();
-      });
-      DOM.waModalActions.appendChild(btn);
-    });
-  }
-
-  DOM.waModal.showModal();
-}
 
 /* ==========================================================================
    COMMITTEE PIN SECURITY (CLIENT-SIDE PREVENTION)
