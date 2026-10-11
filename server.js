@@ -88,11 +88,18 @@ async function sendSmsViaGateway({ phone, message, houseNo, dayNum }) {
 
   const data = await response.json();
 
-  if (!response.ok || data.return === false) {
-    const errorMsg = data.message?.[0] || data.message || `SMS Gateway Error (${response.status})`;
+  if (!response.ok || data.return === false || data.status_code === 999) {
+    let errorMsg = 'SMS Gateway Error';
+    if (typeof data.message === 'string') {
+      errorMsg = data.message;
+    } else if (Array.isArray(data.message) && data.message.length > 0) {
+      errorMsg = data.message[0];
+    } else if (data.message) {
+      errorMsg = String(data.message);
+    }
     const err = new Error(errorMsg);
     err.details = data;
-    err.status = response.status;
+    err.status = response.status >= 400 ? response.status : 400;
     throw err;
   }
 
