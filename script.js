@@ -375,11 +375,17 @@ function renderSchedule() {
     tdDay.setAttribute("data-label", "Day");
     tdDay.textContent = day.dayName;
 
-    // 4. Norata Cell (Clean Authentic Gujarati Norata Names: પહેલું નોરતું, બીજું નોરતું...)
+    // 4. Norata Cell (First Noratu, Second Noratu... with Gujarati name, protected from auto-translation)
     const tdNorata = document.createElement("td");
-    tdNorata.className = "cell-norata";
+    tdNorata.className = "cell-norata notranslate";
     tdNorata.setAttribute("data-label", "Norata");
-    tdNorata.innerHTML = `<span class="norata-title-gujarati">${day.norata}</span>`;
+    tdNorata.setAttribute("translate", "no");
+    tdNorata.innerHTML = `
+      <div class="norata-box">
+        <span class="norata-en-text">${day.norataEn}</span>
+        <span class="norata-gu-text">(${day.norataGu})</span>
+      </div>
+    `;
 
     // 5. House No. Cell (The widest column)
     const tdHouse = document.createElement("td");

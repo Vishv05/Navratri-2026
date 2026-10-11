@@ -74,13 +74,11 @@ export function extractPhoneNumbers(rawContact) {
   for (const item of rawList) {
     if (!item) continue;
     const trimmed = String(item).trim();
-    // If it contains placeholder X, treat as not yet configured
     if (trimmed.toUpperCase().includes("X")) continue;
 
     let digits = trimmed.replace(/[^0-9]/g, "");
     if (!digits) continue;
 
-    // Convert 10-digit Indian numbers to standard international 12-digit format
     if (digits.length === 10) {
       digits = "91" + digits;
     }
@@ -97,7 +95,7 @@ export function extractPhoneNumbers(rawContact) {
 
 /**
  * 9 Days of Navratri 2026 Schedule
- * Shows clean Gujarati Norata names: પહેલું નોરતું થી નવમું નોરતું
+ * Clear, accurate Norata names: First Noratu (પહેલું નોરતું) to Ninth Noratu (નવમું નોરતું)
  */
 export const SCHEDULE = [
   {
@@ -106,7 +104,9 @@ export const SCHEDULE = [
     isoDate: "2026-10-11",
     dayName: "Sunday (રવિવાર)",
     dayNameGujarati: "રવિવાર",
-    norata: "પહેલું નોરતું",
+    norataEn: "First Noratu",
+    norataGu: "પહેલું નોરતું",
+    norata: "First Noratu (પહેલું નોરતું)",
     quote: {
       gujarati: "મા શૈલપુત્રી આપના પરિવારમાં સુખ, શાંતિ અને અખંડ સમૃદ્ધિનું આગમન કરાવે.",
       english: "May Maa Shailputri bless your home with strength, peace, and auspicious new beginnings."
@@ -118,7 +118,9 @@ export const SCHEDULE = [
     isoDate: "2026-10-12",
     dayName: "Monday (સોમવાર)",
     dayNameGujarati: "સોમવાર",
-    norata: "બીજું નોરતું",
+    norataEn: "Second Noratu",
+    norataGu: "બીજું નોરતું",
+    norata: "Second Noratu (બીજું નોરતું)",
     quote: {
       gujarati: "તપ અને સંયમની પ્રતીક મા બ્રહ્મચારિણી સદૈવ આપના જીવનપંથને દિવ્ય પ્રકાશથી ઉજાળે.",
       english: "May Maa Brahmacharini guide your family on the path of devotion, harmony, and virtue."
@@ -130,7 +132,9 @@ export const SCHEDULE = [
     isoDate: "2026-10-13",
     dayName: "Tuesday (મંગળવાર)",
     dayNameGujarati: "મંગળવાર",
-    norata: "ત્રીજું નોરતું",
+    norataEn: "Third Noratu",
+    norataGu: "ત્રીજું નોરતું",
+    norata: "Third Noratu (ત્રીજું નોરતું)",
     quote: {
       gujarati: "મા ચંદ્રઘંટાના આશીર્વાદથી સર્વ સંકટો દૂર થાય અને આપના આંગણે સદાય સૌભાગ્ય પથરાય.",
       english: "May Maa Chandraghanta eliminate all fears and bestow courage, grace, and serenity."
@@ -142,7 +146,9 @@ export const SCHEDULE = [
     isoDate: "2026-10-14",
     dayName: "Wednesday (બુધવાર)",
     dayNameGujarati: "બુધવાર",
-    norata: "ચોથું નોરતું",
+    norataEn: "Fourth Noratu",
+    norataGu: "ચોથું નોરતું",
+    norata: "Fourth Noratu (ચોથું નોરતું)",
     quote: {
       gujarati: "બ્રહ્માંડ સર્જક મા કુષ્માંડા આપના પરિવારને નિરોગી કાયા અને અખૂટ ઉર્જા પ્રદાન કરે.",
       english: "May Maa Kushmanda illuminate your household with radiant health, joy, and divine energy."
@@ -154,7 +160,9 @@ export const SCHEDULE = [
     isoDate: "2026-10-15",
     dayName: "Thursday (ગુરુવાર)",
     dayNameGujarati: "ગુરુવાર",
-    norata: "પાંચમું નોરતું",
+    norataEn: "Fifth Noratu",
+    norataGu: "પાંચમું નોરતું",
+    norata: "Fifth Noratu (પાંચમું નોરતું)",
     quote: {
       gujarati: "વાત્સલ્યની મૂર્તિ મા સ્કંદમાતા આપના સંતાનો અને પરિવાર પર સદાય સ્નેહ અને કૃપા વરસાવે.",
       english: "May Maa Skandamata shower pure maternal love, safety, and prosperity upon your family."
@@ -166,7 +174,9 @@ export const SCHEDULE = [
     isoDate: "2026-10-16",
     dayName: "Friday (શુક્રવાર)",
     dayNameGujarati: "શુક્રવાર",
-    norata: "છઠ્ઠું નોરતું",
+    norataEn: "Sixth Noratu",
+    norataGu: "છઠ્ઠું નોરતું",
+    norata: "Sixth Noratu (છઠ્ઠું નોરતું)",
     quote: {
       gujarati: "દુષ્ટ સંહારિણી મા કાત્યાયની આપને ધર્મ, સત્ય અને ઉન્નતિના પંથે વિજયી બનાવે.",
       english: "May Maa Katyayani grant unwavering confidence, righteousness, and victory in all endeavors."
@@ -178,7 +188,9 @@ export const SCHEDULE = [
     isoDate: "2026-10-17",
     dayName: "Saturday (શનિવાર)",
     dayNameGujarati: "શનિવાર",
-    norata: "સાતમું નોરતું",
+    norataEn: "Seventh Noratu",
+    norataGu: "સાતમું નોરતું",
+    norata: "Seventh Noratu (સાતમું નોરતું)",
     quote: {
       gujarati: "કાળ અને ભયનું નિવારણ કરનારી મા કાલરાત્રિ આપના ઘરનું સદૈવ અદ્રશ્ય રક્ષણ કરે.",
       english: "May Maa Kalaratri dispel all darkness and shield your family in every adversity."
@@ -190,7 +202,9 @@ export const SCHEDULE = [
     isoDate: "2026-10-18",
     dayName: "Sunday (રવિવાર)",
     dayNameGujarati: "રવિવાર",
-    norata: "આઠમું નોરતું",
+    norataEn: "Eighth Noratu",
+    norataGu: "આઠમું નોરતું",
+    norata: "Eighth Noratu (આઠમું નોરતું)",
     quote: {
       gujarati: "કરુણા અને પવિત્રતાની દેવી મા મહાગૌરી આપના સર્વ મનોરથ પૂર્ણ કરી પરમ શાંતિ આપે.",
       english: "May Maa Mahagauri fulfill all noble aspirations and purify life with serene bliss."
@@ -202,7 +216,9 @@ export const SCHEDULE = [
     isoDate: "2026-10-19",
     dayName: "Monday (સોમવાર)",
     dayNameGujarati: "સોમવાર",
-    norata: "નવમું નોરતું",
+    norataEn: "Ninth Noratu",
+    norataGu: "નવમું નોરતું",
+    norata: "Ninth Noratu (નવમું નોરતું)",
     quote: {
       gujarati: "સર્વ સિદ્ધિ અને સુખ આપનારી મા સિદ્ધિદાત્રી આપના ઘરમાં અખંડ આનંદ સ્થાપે.",
       english: "May Maa Siddhidatri bestow ultimate wisdom, divine accomplishment, and supreme joy."
@@ -224,7 +240,7 @@ export function buildWhatsAppMessage(dayNum, houseNo) {
     `આદરણીય પરિવારજન (મકાન નં. ${houseNo}),\n` +
     `${SOCIETY_INFO.fullTitle} તરફથી નવરાત્રી ૨૦૨૬ ની આપને અને આપના સમગ્ર પરિવારને હાર્દિક શુભકામનાઓ! 🌺\n\n` +
     `આપશ્રીના પરિવારની પાવન સંધ્યા આરતીની વિગત:\n` +
-    `✨ નોરતું: ${day.norata}\n` +
+    `✨ નોરતું: ${day.norataGu} (${day.norataEn})\n` +
     `📅 તારીખ: ${day.dateStr} [${day.dayName}]\n` +
     `⏰ સમય: ${SOCIETY_INFO.aartiTimeGujarati} (${SOCIETY_INFO.aartiTime})\n` +
     `📍 સ્થળ: ${SOCIETY_INFO.venueGujarati} (${SOCIETY_INFO.name})\n\n` +

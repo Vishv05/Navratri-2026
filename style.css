@@ -754,23 +754,26 @@ body {
 .cell-norata {
   font-weight: 700;
   color: var(--text-primary);
-  font-family: var(--font-gujarati);
 }
 
-.norata-title-gujarati {
-  font-family: var(--font-gujarati);
-  font-size: 1.05rem;
+.norata-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.norata-en-text {
+  font-size: 1rem;
   font-weight: 700;
-  color: var(--gold-light);
+  color: var(--gold-primary);
   letter-spacing: 0.02em;
 }
 
-.goddess-subtitle {
-  display: block;
-  font-size: 0.775rem;
-  font-weight: 500;
-  color: var(--text-muted);
-  margin-top: 0.2rem;
+.norata-gu-text {
+  font-family: var(--font-gujarati);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
 /* Today's row pulse highlight */
