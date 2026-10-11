@@ -39,22 +39,22 @@ export const HOUSES = [
  * (10-digit numbers automatically get prefixed with India country code 91)
  */
 export const HOUSE_CONTACTS = {
-  "C-279": "91XXXXXXXXXX",
-  "C-280": "91XXXXXXXXXX",
-  "C-281": "91XXXXXXXXXX",
-  "C-282": "91XXXXXXXXXX",
-  "C-283": "91XXXXXXXXXX",
-  "C-284": "91XXXXXXXXXX",
-  "C-285": "91XXXXXXXXXX",
-  "C-286": "91XXXXXXXXXX",
-  "C-287": "91XXXXXXXXXX",
-  "C-288": "91XXXXXXXXXX",
-  "C-289": "91XXXXXXXXXX",
-  "C-290": "91XXXXXXXXXX",
-  "C-291": "91XXXXXXXXXX",
-  "C-292": "91XXXXXXXXXX",
-  "C-293": "91XXXXXXXXXX",
-  "C-294": "91XXXXXXXXXX"
+  "C-279": "919723302459",
+  "C-280": "919687497024",
+  "C-281": "919408145834",
+  "C-282": ["917990254394", "919427958119"],
+  "C-283": ["918128197789", "917600082467"],
+  "C-284": ["919924014723", "919586971399"],
+  "C-285": ["918905819029", "919327060712"],
+  "C-286": "919974847363",
+  "C-287": "919824057465",
+  "C-288": ["919824656188", "919426631668"],
+  "C-289": ["919898944337", "919033022061", "917567704665"],
+  "C-290": "919913648520",
+  "C-291": "919879038348",
+  "C-292": "919512662229",
+  "C-293": "917069908394",
+  "C-294": "919328235675"
 };
 
 /**
@@ -79,7 +79,9 @@ export function getSavedHouseContacts() {
  */
 export function getHouseContacts(houseNo) {
   const saved = getSavedHouseContacts();
-  if (saved[houseNo]) return saved[houseNo];
+  if (saved[houseNo] && !String(saved[houseNo]).toUpperCase().includes("X")) {
+    return saved[houseNo];
+  }
   return HOUSE_CONTACTS[houseNo] || "";
 }
 

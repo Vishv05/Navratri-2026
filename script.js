@@ -450,7 +450,7 @@ function createAssignedBadge(dayNum, houseNo) {
  */
 async function sendSmsToHouse(dayNum, houseNo) {
   if (!houseNo) return;
-  const rawContact = HOUSE_CONTACTS[houseNo];
+  const rawContact = getHouseContacts(houseNo) || HOUSE_CONTACTS[houseNo];
   const phones = extractPhoneNumbers(rawContact);
   const message = buildSmsMessage(dayNum, houseNo);
   const primaryPhone = phones.length > 0 ? phones[0] : null;
