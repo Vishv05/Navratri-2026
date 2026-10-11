@@ -5,7 +5,7 @@
  * ES Module with vanilla JavaScript, Firebase Modular CDN, and local fallbacks.
  */
 
-import { SOCIETY_INFO, HOUSES, HOUSE_CONTACTS, SCHEDULE, buildWhatsAppMessage } from "./data.js";
+import { SOCIETY_INFO, HOUSES, HOUSE_CONTACTS, SCHEDULE, buildWhatsAppMessage, extractPhoneNumbers } from "./data.js";
 import { firebaseConfig, FIRESTORE_SETTINGS, COMMITTEE_CONFIG } from "./firebase-config.js";
 
 // Official Firebase CDN Modular imports (ES Modules)
@@ -77,7 +77,7 @@ const DOM = {
   waModalDate: document.getElementById("wa-modal-date"),
   waModalPhone: document.getElementById("wa-modal-phone"),
   waPreview: document.getElementById("wa-message-preview"),
-  waOpenBtn: document.getElementById("wa-open-btn"),
+  waModalActions: document.getElementById("wa-modal-actions"),
   waCopyBtn: document.getElementById("wa-copy-btn"),
   waCloseBtn: document.getElementById("wa-modal-close"),
   resetModal: document.getElementById("reset-confirm-modal"),
@@ -106,7 +106,6 @@ document.addEventListener("DOMContentLoaded", () => {
    FIREBASE & LIVE DATA SYNCHRONIZATION
    ========================================================================== */
 function initFirebase() {
-  // Check if user is using the placeholder credentials
   const isPlaceholderConfig = 
     !firebaseConfig.apiKey || 
     firebaseConfig.apiKey.includes("YOUR_API_KEY") ||
@@ -114,7 +113,7 @@ function initFirebase() {
     firebaseConfig.projectId.includes("your-project-id");
 
   if (isPlaceholderConfig) {
-    console.info("ℹ️ Running in Demo Mode with LocalStorage. (To enable live cloud sync, update firebase-config.js with your Firebase credentials).");
+    console.info("ℹ️ Running in Demo Mode with LocalStorage.");
     updateLiveIndicator("demo");
     return;
   }
@@ -175,10 +174,9 @@ function updateLiveIndicator(status) {
     DOM.liveStatusText.textContent = "Offline (કેશ્ડ ડેટા)";
     DOM.liveStatusBadge.title = "Offline or disconnected. Displaying cached local assignments.";
   } else {
-    // Demo mode
     DOM.liveDot.className = "live-dot syncing";
     DOM.liveStatusText.textContent = "Demo Mode (LocalStorage)";
-    DOM.liveStatusBadge.title = "Demo Mode: Storing in LocalStorage. Add Firebase credentials in firebase-config.js for live cloud sync.";
+    DOM.liveStatusBadge.title = "Demo Mode: Storing in LocalStorage.";
   }
 }
 
@@ -243,19 +241,12 @@ function loadCachedAssignments() {
 /* ==========================================================================
    TRANSACTIONAL SAVE / EDIT WITH CONCURRENCY PROTECTION
    ========================================================================== */
-/**
- * Attempt to assign a house to a specific day
- * @param {number} dayNum Day 1 to 9
- * @param {string|null} houseNo e.g. "C-284" or null to clear
- */
 async function performHouseAssignment(dayNum, houseNo) {
-  // If PIN protection is enabled and user is not unlocked, prompt PIN first
   if (COMMITTEE_CONFIG.requirePinForEdits && !STATE.isCommitteeUnlocked) {
     requestCommitteePin({ type: "assign", dayNum, houseNo });
     return;
   }
 
-  // 1. If Firebase is active, use Firestore Transaction to prevent race conditions
   if (STATE.isFirebaseActive && STATE.db) {
     try {
       showToast(`Saving ${houseNo || 'clear'} for Day ${dayNum}...`, "info");
@@ -265,7 +256,6 @@ async function performHouseAssignment(dayNum, houseNo) {
         const snap = await transaction.get(docRef);
         const currentData = snap.exists() ? snap.data() : {};
 
-        // If assigning a house, verify no other day took it in the meantime!
         if (houseNo !== null) {
           for (let d = 1; d <= 9; d++) {
             if (d !== dayNum && currentData[`day${d}`] === houseNo) {
@@ -275,7 +265,6 @@ async function performHouseAssignment(dayNum, houseNo) {
           }
         }
 
-        // Apply update
         transaction.set(docRef, {
           ...currentData,
           [`day${dayNum}`]: houseNo
@@ -291,12 +280,10 @@ async function performHouseAssignment(dayNum, houseNo) {
     } catch (err) {
       console.error("Assignment transaction error:", err);
       showToast(`⚠️ ${err.message}`, "error");
-      renderSchedule(); // Re-render to refresh options
+      renderSchedule();
     }
   } else {
-    // 2. Demo / LocalStorage mode simulation
     if (houseNo !== null) {
-      // Check for local conflict
       for (let d = 1; d <= 9; d++) {
         if (d !== dayNum && STATE.assignments[`day${d}`] === houseNo) {
           showToast(`⚠️ House ${houseNo} is already assigned to Day ${d}!`, "error");
@@ -310,16 +297,13 @@ async function performHouseAssignment(dayNum, houseNo) {
     renderSchedule();
 
     if (houseNo) {
-      showToast(`✅ [Demo] મકાન નં. ${houseNo} દિવસ ${dayNum} માટે પસંદ થયું!`, "success");
+      showToast(`✅ મકાન નં. ${houseNo} દિવસ ${dayNum} માટે પસંદ થયું!`, "success");
     } else {
-      showToast(`[Demo] દિવસ ${dayNum} ની પસંદગી ખાલી કરવામાં આવી.`, "info");
+      showToast(`દિવસ ${dayNum} ની પસંદગી ખાલી કરવામાં આવી.`, "info");
     }
   }
 }
 
-/**
- * Reset all 9 assignments
- */
 async function performResetAll() {
   if (COMMITTEE_CONFIG.requirePinForEdits && !STATE.isCommitteeUnlocked) {
     requestCommitteePin({ type: "reset" });
@@ -347,16 +331,13 @@ async function performResetAll() {
     }
     saveAssignmentsToCache();
     renderSchedule();
-    showToast("[Demo] તમામ ફાળવણી રીસેટ થઈ ગઈ છે.", "info");
+    showToast("તમામ ફાળવણી રીસેટ થઈ ગઈ છે.", "info");
   }
 }
 
 /* ==========================================================================
    SCHEDULE TABLE RENDERING & ACCESSIBLE DROPDOWN
    ========================================================================== */
-/**
- * Renders the 9-day schedule table / mobile cards
- */
 function renderSchedule() {
   const currentAssignedHouses = new Map();
   for (let i = 1; i <= 9; i++) {
@@ -364,7 +345,6 @@ function renderSchedule() {
     if (h) currentAssignedHouses.set(h, i);
   }
 
-  // Detect today's date for auto-highlighting
   const todayIso = getTodayIsoDate();
 
   DOM.tbody.innerHTML = "";
@@ -395,14 +375,11 @@ function renderSchedule() {
     tdDay.setAttribute("data-label", "Day");
     tdDay.textContent = day.dayName;
 
-    // 4. Norata Cell
+    // 4. Norata Cell (Clean Authentic Gujarati Norata Names: પહેલું નોરતું, બીજું નોરતું...)
     const tdNorata = document.createElement("td");
     tdNorata.className = "cell-norata";
     tdNorata.setAttribute("data-label", "Norata");
-    tdNorata.innerHTML = `
-      <span>${day.norata}</span>
-      <span class="goddess-subtitle">${day.goddess}</span>
-    `;
+    tdNorata.innerHTML = `<span class="norata-title-gujarati">${day.norata}</span>`;
 
     // 5. House No. Cell (The widest column)
     const tdHouse = document.createElement("td");
@@ -413,20 +390,17 @@ function renderSchedule() {
     wrapper.className = "house-cell-wrapper";
 
     if (assignedHouse) {
-      // House is chosen: Render badge with change, clear, and WhatsApp actions
       const badge = createAssignedBadge(day.dayNum, assignedHouse);
       const waBtn = createWhatsAppButton(day.dayNum, assignedHouse);
       wrapper.appendChild(badge);
       wrapper.appendChild(waBtn);
     } else {
-      // House is unassigned: Render custom-styled accessible dropdown
       const customSelect = createCustomDropdown(day.dayNum, currentAssignedHouses);
       wrapper.appendChild(customSelect);
     }
 
     tdHouse.appendChild(wrapper);
 
-    // Append cells to row
     tr.appendChild(tdSr);
     tr.appendChild(tdDate);
     tr.appendChild(tdDay);
@@ -437,9 +411,6 @@ function renderSchedule() {
   });
 }
 
-/**
- * Creates the assigned house badge with change and clear buttons
- */
 function createAssignedBadge(dayNum, houseNo) {
   const badgeContainer = document.createElement("div");
   badgeContainer.className = "assigned-house-badge";
@@ -451,7 +422,6 @@ function createAssignedBadge(dayNum, houseNo) {
   const actions = document.createElement("div");
   actions.className = "badge-actions";
 
-  // Change button
   const changeBtn = document.createElement("button");
   changeBtn.type = "button";
   changeBtn.className = "badge-btn btn-change";
@@ -459,11 +429,9 @@ function createAssignedBadge(dayNum, houseNo) {
   changeBtn.setAttribute("aria-label", `Change assignment for Day ${dayNum}`);
   changeBtn.innerHTML = `✏️ Change`;
   changeBtn.addEventListener("click", () => {
-    // Unassign temporarily or trigger change
     performHouseAssignment(dayNum, null);
   });
 
-  // Clear button
   const clearBtn = document.createElement("button");
   clearBtn.type = "button";
   clearBtn.className = "badge-btn btn-clear";
@@ -482,9 +450,6 @@ function createAssignedBadge(dayNum, houseNo) {
   return badgeContainer;
 }
 
-/**
- * Creates the WhatsApp Reminder button
- */
 function createWhatsAppButton(dayNum, houseNo) {
   const btn = document.createElement("button");
   btn.type = "button";
@@ -499,15 +464,11 @@ function createWhatsAppButton(dayNum, houseNo) {
   return btn;
 }
 
-/**
- * Creates custom accessible dropdown (not default select)
- */
 function createCustomDropdown(dayNum, assignedHousesMap) {
   const container = document.createElement("div");
   container.className = "custom-select-container";
   container.id = `select-container-${dayNum}`;
 
-  // Trigger button
   const trigger = document.createElement("button");
   trigger.type = "button";
   trigger.className = "custom-select-trigger";
@@ -519,13 +480,11 @@ function createCustomDropdown(dayNum, assignedHousesMap) {
     <span class="chevron-icon" aria-hidden="true">▼</span>
   `;
 
-  // Dropdown menu panel
   const menu = document.createElement("div");
   menu.className = "custom-select-menu";
   menu.setAttribute("role", "listbox");
   menu.setAttribute("tabindex", "-1");
 
-  // Populate options C-279 to C-294
   HOUSES.forEach((house) => {
     const option = document.createElement("div");
     option.className = "custom-select-option";
@@ -549,14 +508,12 @@ function createCustomDropdown(dayNum, assignedHousesMap) {
         <span class="avail-tag">✓</span>
       `;
 
-      // Select action
       option.addEventListener("click", (e) => {
         e.stopPropagation();
         closeAllDropdowns();
         performHouseAssignment(dayNum, house);
       });
 
-      // Keyboard select
       option.addEventListener("keydown", (e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -569,7 +526,6 @@ function createCustomDropdown(dayNum, assignedHousesMap) {
     menu.appendChild(option);
   });
 
-  // Toggle dropdown on trigger click
   trigger.addEventListener("click", (e) => {
     e.stopPropagation();
     const isOpen = container.classList.contains("open");
@@ -579,13 +535,11 @@ function createCustomDropdown(dayNum, assignedHousesMap) {
       trigger.setAttribute("aria-expanded", "true");
       STATE.activeDropdownDay = dayNum;
 
-      // Focus first enabled option
       const firstEnabled = menu.querySelector(".custom-select-option:not(.disabled)");
       if (firstEnabled) firstEnabled.focus();
     }
   });
 
-  // Keyboard navigation for dropdown
   container.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       closeAllDropdowns();
@@ -604,9 +558,6 @@ function createCustomDropdown(dayNum, assignedHousesMap) {
   return container;
 }
 
-/**
- * Move keyboard focus between options in dropdown menu
- */
 function moveFocusInMenu(menu, direction) {
   const options = Array.from(menu.querySelectorAll(".custom-select-option:not(.disabled)"));
   if (options.length === 0) return;
@@ -617,9 +568,6 @@ function moveFocusInMenu(menu, direction) {
   options[nextIdx].focus();
 }
 
-/**
- * Close any open custom dropdown
- */
 function closeAllDropdowns() {
   document.querySelectorAll(".custom-select-container.open").forEach((el) => {
     el.classList.remove("open");
@@ -636,44 +584,99 @@ function initGlobalClickHandlers() {
 }
 
 /* ==========================================================================
-   WHATSAPP REMINDER INTEGRATION
+   WHATSAPP REMINDER INTEGRATION (Supports 1 or 2 Phone Numbers, No 404s!)
    ========================================================================== */
-let currentWaPayload = { phone: "", url: "", message: "" };
-
 /**
- * Open WhatsApp dialog with prefilled message
+ * Opens WhatsApp preview modal and generates 100% valid WhatsApp links
+ * Handles 1 number, 2 numbers, or general contact selection cleanly.
  */
 function openWhatsAppDialog(dayNum, houseNo) {
   const day = SCHEDULE.find(d => d.dayNum === dayNum);
-  const rawPhone = HOUSE_CONTACTS[houseNo] || "";
-  const cleanPhone = String(rawPhone).replace(/[^0-9]/g, "");
-
-  // Check if contact is missing or placeholder
-  const isPlaceholderNumber = !cleanPhone || cleanPhone.includes("X") || cleanPhone.length < 10;
-
-  if (isPlaceholderNumber) {
-    showToast(`⚠️ ${houseNo} માટે WhatsApp નંબર data.js માં હજુ નોંધાયેલ નથી!`, "error");
-  }
-
+  const rawContact = HOUSE_CONTACTS[houseNo];
+  const phones = extractPhoneNumbers(rawContact);
   const message = buildWhatsAppMessage(dayNum, houseNo);
-  const waUrl = isPlaceholderNumber 
-    ? `https://wa.me/?text=${encodeURIComponent(message)}` 
-    : `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
-
-  currentWaPayload = {
-    phone: cleanPhone,
-    url: waUrl,
-    message: message,
-    isPlaceholder: isPlaceholderNumber,
-    houseNo: houseNo
-  };
 
   DOM.waModalHouse.textContent = houseNo;
   DOM.waModalDate.textContent = `${day.norata} (${day.dateStr})`;
-  DOM.waModalPhone.textContent = isPlaceholderNumber 
-    ? "નંબર નોંધાયેલ નથી (data.js)" 
-    : `+${cleanPhone}`;
   DOM.waPreview.value = message;
+
+  // Clear previous dynamic buttons
+  DOM.waModalActions.innerHTML = "";
+
+  // Copy button (always available)
+  const copyBtn = document.createElement("button");
+  copyBtn.type = "button";
+  copyBtn.className = "btn btn-secondary";
+  copyBtn.innerHTML = "મેસેજ કોપી કરો (Copy)";
+  copyBtn.addEventListener("click", () => {
+    navigator.clipboard.writeText(DOM.waPreview.value)
+      .then(() => showToast("📋 મેસેજ ક્લિપબોર્ડ પર કોપી થયો!", "success"))
+      .catch(() => showToast("મેસેજ કોપી કરવામાં ભૂલ થઈ.", "error"));
+  });
+
+  if (phones.length === 0) {
+    // Case 0: No phone number or placeholder in data.js
+    DOM.waModalPhone.innerHTML = `<span style="color:var(--status-warning);">નંબર નોંધાયેલ નથી (data.js)</span>`;
+    showToast(`⚠️ ${houseNo} માટે WhatsApp નંબર data.js માં હજુ નોંધાયેલ નથી.`, "info");
+
+    // Use official universal WhatsApp send endpoint so user can select any contact without 404
+    const universalUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+
+    const openBtn = document.createElement("button");
+    openBtn.type = "button";
+    openBtn.className = "btn btn-whatsapp";
+    openBtn.innerHTML = "WhatsApp ખોલો (સંપર્ક પસંદ કરો) 🚀";
+    openBtn.addEventListener("click", () => {
+      window.open(universalUrl, "_blank", "noopener,noreferrer");
+      DOM.waModal.close();
+    });
+
+    DOM.waModalActions.appendChild(copyBtn);
+    DOM.waModalActions.appendChild(openBtn);
+
+  } else if (phones.length === 1) {
+    // Case 1: Exactly 1 valid phone number
+    const singlePhone = phones[0];
+    DOM.waModalPhone.innerHTML = `<span class="phone-tag">+${singlePhone}</span>`;
+
+    const waUrl = `https://wa.me/${singlePhone}?text=${encodeURIComponent(message)}`;
+
+    const openBtn = document.createElement("button");
+    openBtn.type = "button";
+    openBtn.className = "btn btn-whatsapp";
+    openBtn.innerHTML = `WhatsApp ખોલો (+${singlePhone}) 🚀`;
+    openBtn.addEventListener("click", () => {
+      window.open(waUrl, "_blank", "noopener,noreferrer");
+      DOM.waModal.close();
+    });
+
+    DOM.waModalActions.appendChild(copyBtn);
+    DOM.waModalActions.appendChild(openBtn);
+
+  } else {
+    // Case 2: House has 2 (or more) phone numbers!
+    // Display both phone numbers clearly
+    DOM.waModalPhone.innerHTML = phones.map((p, idx) => `
+      <span class="phone-tag" style="margin-right: 6px;">નંબર ${idx + 1}: +${p}</span>
+    `).join("<br>");
+
+    DOM.waModalActions.appendChild(copyBtn);
+
+    // Create a dedicated button for EACH phone number to prevent 404s!
+    phones.forEach((p, idx) => {
+      const waUrl = `https://wa.me/${p}?text=${encodeURIComponent(message)}`;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn btn-whatsapp";
+      btn.style.whiteSpace = "normal";
+      btn.innerHTML = `📱 WhatsApp: +${p} (નંબર ${idx + 1}) 🚀`;
+      btn.addEventListener("click", () => {
+        window.open(waUrl, "_blank", "noopener,noreferrer");
+        DOM.waModal.close();
+      });
+      DOM.waModalActions.appendChild(btn);
+    });
+  }
 
   DOM.waModal.showModal();
 }
@@ -681,9 +684,6 @@ function openWhatsAppDialog(dayNum, houseNo) {
 /* ==========================================================================
    COMMITTEE PIN SECURITY (CLIENT-SIDE PREVENTION)
    ========================================================================== */
-/**
- * Prompt for Committee PIN
- */
 function requestCommitteePin(action) {
   STATE.pendingAction = action;
   DOM.pinInput.value = "";
@@ -692,9 +692,6 @@ function requestCommitteePin(action) {
   setTimeout(() => DOM.pinInput.focus(), 100);
 }
 
-/**
- * Hash PIN using browser crypto SHA-256
- */
 async function computeSha256(str) {
   const encoder = new TextEncoder();
   const data = encoder.encode(str.trim());
@@ -703,9 +700,6 @@ async function computeSha256(str) {
   return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-/**
- * Verify entered Committee PIN
- */
 async function verifyCommitteePin() {
   const enteredPin = DOM.pinInput.value.trim();
   if (!enteredPin) {
@@ -718,14 +712,12 @@ async function verifyCommitteePin() {
     const computedHash = await computeSha256(enteredPin);
 
     if (computedHash === COMMITTEE_CONFIG.pinHash) {
-      // Correct PIN
       STATE.isCommitteeUnlocked = true;
       sessionStorage.setItem(COMMITTEE_CONFIG.sessionKey, "true");
       updateCommitteeToolbarState(true);
       DOM.pinModal.close();
       showToast("🔓 કમિટી મોડ સક્રિય થયો! (Committee Unlocked)", "success");
 
-      // Execute pending action if any
       if (STATE.pendingAction) {
         const action = STATE.pendingAction;
         STATE.pendingAction = null;
@@ -736,7 +728,6 @@ async function verifyCommitteePin() {
         }
       }
     } else {
-      // Incorrect PIN
       DOM.pinErrorMsg.textContent = "ખોટો પિન! કૃપા કરીને ફરી પ્રયાસ કરો. (Incorrect PIN)";
       DOM.pinErrorMsg.classList.remove("hidden");
       const card = DOM.pinModal.querySelector(".modal-card");
@@ -748,7 +739,6 @@ async function verifyCommitteePin() {
     }
   } catch (e) {
     console.error("Crypto error:", e);
-    // Fallback comparison for default '2026'
     if (enteredPin === "2026") {
       STATE.isCommitteeUnlocked = true;
       sessionStorage.setItem(COMMITTEE_CONFIG.sessionKey, "true");
@@ -777,7 +767,6 @@ function updateCommitteeToolbarState(unlocked) {
    COUNTDOWN TIMER & TODAY'S AARTI HIGHLIGHT
    ========================================================================== */
 function startCountdownTimer() {
-  // Navratri 2026 Day 1 start: 11 Oct 2026 at 20:00:00 (8:00 PM) IST (+05:30)
   const navratriStartDate = new Date("2026-10-11T20:00:00+05:30").getTime();
   const navratriEndDate = new Date("2026-10-19T23:59:59+05:30").getTime();
 
@@ -787,7 +776,6 @@ function startCountdownTimer() {
     const distanceToEnd = navratriEndDate - now;
 
     if (distanceToStart > 0) {
-      // Before Navratri: show countdown
       const days = Math.floor(distanceToStart / (1000 * 60 * 60 * 24));
       const hours = Math.floor((distanceToStart % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
       const minutes = Math.floor((distanceToStart % (1000 * 60 * 60)) / (1000 * 60));
@@ -803,7 +791,6 @@ function startCountdownTimer() {
       DOM.countdownHeader.textContent = "⏳ Navratri 2026 Countdown (નવરાત્રી પ્રારંભ)";
 
     } else if (distanceToEnd > 0) {
-      // During Navratri 2026!
       DOM.countdownGrid.classList.add("hidden");
       DOM.todayBanner.classList.remove("hidden");
 
@@ -818,7 +805,6 @@ function startCountdownTimer() {
       }
 
     } else {
-      // After Navratri
       DOM.countdownGrid.classList.add("hidden");
       DOM.todayBanner.classList.remove("hidden");
       DOM.countdownHeader.textContent = "🌸 નવરાત્રી ૨૦૨૬ મહોત્સવ સંપન્ન";
@@ -867,14 +853,11 @@ function initLogoFallback() {
 }
 
 function initHeaderToolbar() {
-  // Theme Toggle
   DOM.themeToggleBtn.addEventListener("click", toggleTheme);
 
-  // Committee Lock Button
   updateCommitteeToolbarState(STATE.isCommitteeUnlocked);
   DOM.committeeToggleBtn.addEventListener("click", () => {
     if (STATE.isCommitteeUnlocked) {
-      // Toggle back to lock
       STATE.isCommitteeUnlocked = false;
       sessionStorage.removeItem(COMMITTEE_CONFIG.sessionKey);
       updateCommitteeToolbarState(false);
@@ -884,7 +867,6 @@ function initHeaderToolbar() {
     }
   });
 
-  // Share Schedule
   DOM.sharePageBtn.addEventListener("click", () => {
     const shareData = {
       title: `${SOCIETY_INFO.name} - ${SOCIETY_INFO.eventTitle}`,
@@ -901,12 +883,10 @@ function initHeaderToolbar() {
     }
   });
 
-  // Print Schedule
   DOM.printPageBtn.addEventListener("click", () => {
     window.print();
   });
 
-  // Reset All Button
   DOM.resetAllBtn.addEventListener("click", () => {
     if (COMMITTEE_CONFIG.requirePinForEdits && !STATE.isCommitteeUnlocked) {
       requestCommitteePin({ type: "reset" });
@@ -917,7 +897,6 @@ function initHeaderToolbar() {
 }
 
 function initModals() {
-  // PIN Modal
   DOM.pinSubmitBtn.addEventListener("click", verifyCommitteePin);
   DOM.pinInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") verifyCommitteePin();
@@ -925,23 +904,8 @@ function initModals() {
   DOM.pinCancelBtn.addEventListener("click", () => DOM.pinModal.close());
   DOM.pinCloseBtn.addEventListener("click", () => DOM.pinModal.close());
 
-  // WhatsApp Modal
-  DOM.waOpenBtn.addEventListener("click", () => {
-    if (currentWaPayload.isPlaceholder) {
-      alert(`⚠️ Attention: The contact number for ${currentWaPayload.houseNo} is not configured yet in data.js. WhatsApp will open with the prefilled message so you can pick the recipient in your contact list.`);
-    }
-    window.open(currentWaPayload.url, "_blank", "noopener,noreferrer");
-    DOM.waModal.close();
-  });
-
-  DOM.waCopyBtn.addEventListener("click", () => {
-    navigator.clipboard.writeText(DOM.waPreview.value)
-      .then(() => showToast("📋 મેસેજ ક્લિપબોર્ડ પર કોપી થયો!", "success"))
-      .catch(() => showToast("મેસેજ કોપી કરવામાં ભૂલ થઈ.", "error"));
-  });
   DOM.waCloseBtn.addEventListener("click", () => DOM.waModal.close());
 
-  // Reset Modal
   DOM.resetConfirmBtn.addEventListener("click", () => {
     DOM.resetModal.close();
     performResetAll();
