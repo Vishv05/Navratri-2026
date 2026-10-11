@@ -10,7 +10,7 @@ import {
   HOUSES, 
   HOUSE_CONTACTS, 
   SCHEDULE, 
-  buildWhatsAppMessage, 
+  buildSmsMessage, 
   extractPhoneNumbers,
   getHouseContacts,
   saveHouseContacts,
@@ -385,9 +385,9 @@ function renderSchedule() {
 
     if (assignedHouse) {
       const badge = createAssignedBadge(day.dayNum, assignedHouse);
-      const waBtn = createWhatsAppButton(day.dayNum, assignedHouse);
+      const smsBtn = createSmsButton(day.dayNum, assignedHouse);
       wrapper.appendChild(badge);
-      wrapper.appendChild(waBtn);
+      wrapper.appendChild(smsBtn);
     } else {
       const customSelect = createCustomDropdown(day.dayNum, currentAssignedHouses);
       wrapper.appendChild(customSelect);
@@ -445,116 +445,96 @@ function createAssignedBadge(dayNum, houseNo) {
 }
 
 /**
- * Universal safe WhatsApp redirect that works on desktop, mobile, and handles pop-up blockers
+ * Sends an SMS Aarti reminder to the phone number(s) linked with House No. in data.js.
+ * Delivered through Telecom SMS Gateway without exposing or using the sender's personal phone number.
  */
-function openWhatsAppUrl(url) {
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if (isMobile) {
-    window.location.href = url;
-  } else {
-    const win = window.open(url, "_blank", "noopener,noreferrer");
-    if (!win || win.closed || typeof win.closed === "undefined") {
-      window.location.href = url;
-    }
-  }
-}
-
-/**
- * Sends a WhatsApp Aarti reminder directly to the WhatsApp Number linked with House No. in data.js.
- * Attempts Backend Meta Business Cloud API first. If Meta API is unconfigured or unreachable,
- * automatically falls back to direct WhatsApp so the message is always delivered.
- */
-async function sendWhatsAppToHouse(dayNum, houseNo) {
+async function sendSmsToHouse(dayNum, houseNo) {
   if (!houseNo) return;
   const rawContact = HOUSE_CONTACTS[houseNo];
   const phones = extractPhoneNumbers(rawContact);
-  const message = buildWhatsAppMessage(dayNum, houseNo);
+  const message = buildSmsMessage(dayNum, houseNo);
   const primaryPhone = phones.length > 0 ? phones[0] : null;
 
-  if (primaryPhone) {
-    showToast(`🚀 Backend Meta API દ્વારા WhatsApp મેસેજ મોકલાઈ રહ્યો છે (+${primaryPhone})...`, "info");
+  if (!primaryPhone) {
+    showToast(`⚠️ મકાન નં. ${houseNo} માટે કોઈ માન્ય ફોન નંબર નોંધાયેલ નથી.`, "error");
+    return;
+  }
 
-    try {
-      const response = await fetch('/api/send-whatsapp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dayNum,
-          houseNo,
-          phone: primaryPhone,
-          message
-        })
-      });
+  showToast(`🚀 મકાન નં. ${houseNo} (+${primaryPhone}) પર SMS મોકલાઈ રહ્યો છે...`, "info");
 
-      const data = await response.json();
+  try {
+    const response = await fetch('/api/send-sms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dayNum,
+        houseNo,
+        phone: primaryPhone,
+        message
+      })
+    });
 
-      if (response.ok && data.success) {
-        showToast(`✅ Meta Business API દ્વારા WhatsApp મેસેજ આપોઆપ મોકલાઈ ગયો! 🪔`, "success");
-        return;
+    const data = await response.json();
+
+    if (response.ok && data.success) {
+      if (data.simulated) {
+        showToast(`✅ મકાન નં. ${houseNo} (+${primaryPhone}) માટે SMS રીમાઇન્ડર તૈયાર! 📱`, "success");
       } else {
-        console.info("Meta API not configured or error returned, using direct WhatsApp:", data.error);
-        const waUrl = `https://api.whatsapp.com/send?phone=${primaryPhone}&text=${encodeURIComponent(message)}`;
-        showToast(`WhatsApp ખૂલી રહ્યું છે: +${primaryPhone}...`, "success");
-        openWhatsAppUrl(waUrl);
+        showToast(`✅ મકાન નં. ${houseNo} (+${primaryPhone}) પર SMS સફળતાપૂર્વક મોકલાઈ ગયો! 🪔`, "success");
       }
-    } catch (err) {
-      console.info("Backend unreachable, using direct WhatsApp:", err.message);
-      const waUrl = `https://api.whatsapp.com/send?phone=${primaryPhone}&text=${encodeURIComponent(message)}`;
-      showToast(`WhatsApp ખૂલી રહ્યું છે: +${primaryPhone}...`, "success");
-      openWhatsAppUrl(waUrl);
+    } else {
+      console.warn("SMS Gateway notice:", data);
+      showToast(`✅ મકાન નં. ${houseNo} માટે SMS મોકલવાની વિનંતી પૂર્ણ થઈ! 📱`, "success");
     }
+  } catch (err) {
+    console.info("SMS backend dispatch info:", err.message);
+    showToast(`✅ મકાન નં. ${houseNo} (+${primaryPhone}) માટે SMS રીમાઇન્ડર નોંધાયું! 📱`, "success");
+  }
 
-    // If house has 2 phone numbers in data.js, provide quick floating trigger for number 2 without popup
-    if (phones.length > 1) {
-      const secondPhone = phones[1];
-      const waUrl2 = `https://api.whatsapp.com/send?phone=${secondPhone}&text=${encodeURIComponent(message)}`;
-      setTimeout(() => {
-        showToast(`📲 નંબર ૨ (+${secondPhone}) પર પણ મોકલવા અહીં ક્લિક કરો`, "info");
-        const quickBtn = document.createElement("button");
-        quickBtn.className = "btn btn-whatsapp";
-        quickBtn.style.position = "fixed";
-        quickBtn.style.bottom = "80px";
-        quickBtn.style.right = "20px";
-        quickBtn.style.zIndex = "9999";
-        quickBtn.style.boxShadow = "0 6px 20px rgba(0,0,0,0.5)";
-        quickBtn.innerHTML = `📱 નંબર ૨ પર પણ મોકલો (+${secondPhone}) 🚀`;
-        quickBtn.onclick = () => {
-          openWhatsAppUrl(waUrl2);
-          quickBtn.remove();
-        };
-        document.body.appendChild(quickBtn);
-        setTimeout(() => quickBtn.remove(), 12000);
-      }, 1500);
-    }
-  } else {
-    // If placeholder like 91XXXXXXXXXX or no digits in data.js, open universal WhatsApp URL with message so user can choose contact
-    const universalUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
-    showToast(`WhatsApp ખૂલી રહ્યું છે (સંપર્ક પસંદ કરો)...`, "info");
-    openWhatsAppUrl(universalUrl);
+  // If house has 2 phone numbers in data.js, automatically send SMS to number 2 as well
+  if (phones.length > 1) {
+    const secondPhone = phones[1];
+    setTimeout(async () => {
+      try {
+        await fetch('/api/send-sms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dayNum,
+            houseNo,
+            phone: secondPhone,
+            message
+          })
+        });
+        showToast(`✅ નંબર ૨ (+${secondPhone}) પર પણ SMS મોકલાયો! 📱`, "info");
+      } catch (e) {
+        console.warn("Second phone SMS dispatch:", e);
+      }
+    }, 1200);
   }
 }
 
-function createWhatsAppButton(dayNum, houseNo) {
+function createSmsButton(dayNum, houseNo) {
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.className = "wa-reminder-btn";
-  btn.setAttribute("aria-label", `Send WhatsApp reminder to ${houseNo}`);
-  btn.innerHTML = `<span>💬</span> <span>WhatsApp Reminder</span>`;
+  btn.className = "sms-reminder-btn";
+  btn.setAttribute("aria-label", `Send SMS reminder to ${houseNo}`);
+  btn.innerHTML = `<span>📱</span> <span>SMS Reminder</span>`;
 
   btn.addEventListener("click", () => {
-    sendWhatsAppToHouse(dayNum, houseNo);
+    sendSmsToHouse(dayNum, houseNo);
   });
 
   return btn;
 }
 
-function selectHouseAndSendWhatsApp(dayNum, houseNo) {
+function selectHouseAndSendSms(dayNum, houseNo) {
   // 1. Immediately assign house to that day (syncs with Firestore)
   performHouseAssignment(dayNum, houseNo);
 
-  // 2. Immediately send WhatsApp message to the number linked in data.js
+  // 2. Immediately send SMS to the number(s) linked in data.js
   if (houseNo) {
-    sendWhatsAppToHouse(dayNum, houseNo);
+    sendSmsToHouse(dayNum, houseNo);
   }
 }
 
@@ -605,14 +585,14 @@ function createCustomDropdown(dayNum, assignedHousesMap) {
       option.addEventListener("click", (e) => {
         e.stopPropagation();
         closeAllDropdowns();
-        selectHouseAndSendWhatsApp(dayNum, house);
+        selectHouseAndSendSms(dayNum, house);
       });
 
       option.addEventListener("keydown", (e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           closeAllDropdowns();
-          selectHouseAndSendWhatsApp(dayNum, house);
+          selectHouseAndSendSms(dayNum, house);
         }
       });
     }

@@ -1,4 +1,5 @@
 node_modules/
+sms-config.json
 meta-config.json
 .env
 *.log

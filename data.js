@@ -282,27 +282,24 @@ export const SCHEDULE = [
 ];
 
 /**
- * Helper to build the bilingual WhatsApp reminder message
+ * Helper to build the bilingual SMS reminder message
  * @param {number} dayNum 1-9
  * @param {string} houseNo e.g. "C-284"
  * @returns {string} Fully formatted message string
  */
-export function buildWhatsAppMessage(dayNum, houseNo) {
+export function buildSmsMessage(dayNum, houseNo) {
   const day = SCHEDULE.find(d => d.dayNum === dayNum);
   if (!day) return "";
 
-  return `🪔 જય માતાજી! / Jai Mataji! 🙏\n\n` +
-    `આદરણીય પરિવારજન (મકાન નં. ${houseNo}),\n` +
-    `${SOCIETY_INFO.fullTitle} તરફથી નવરાત્રી ૨૦૨૬ ની આપને અને આપના સમગ્ર પરિવારને હાર્દિક શુભકામનાઓ! 🌺\n\n` +
-    `આપશ્રીના પરિવારની પાવન સંધ્યા આરતીની વિગત:\n` +
+  return `જય માતાજી! 🙏\n` +
+    `મકાન નં. ${houseNo} માટે આરતી વિગત:\n` +
     `✨ નોરતું: ${day.norataGu} (${day.norataEn})\n` +
     `📅 તારીખ: ${day.dateStr} [${day.dayName}]\n` +
     `⏰ સમય: ${SOCIETY_INFO.aartiTimeGujarati} (${SOCIETY_INFO.aartiTime})\n` +
-    `📍 સ્થળ: ${SOCIETY_INFO.venueGujarati} (${SOCIETY_INFO.name})\n\n` +
-    `🌺 આજના નોરતાનું સુવિચાર:\n` +
-    `"${day.quote.gujarati}"\n` +
-    `("${day.quote.english}")\n\n` +
-    `આપ સર્વે પરિવારજનો સાથે સમયસર આરતીમાં પધારી માતાજીના આશીર્વાદ અને પ્રસાદ ગ્રહણ કરશો એવી નમ્ર વિનંતી છે. 🙏🪔✨\n\n` +
-    `— આયોજક: ${SOCIETY_INFO.name} નવરાત્રી સમિતિ\n` +
-    `Ghanshyamnagar Tenament, Ghodasar - 380050`;
+    `📍 સ્થળ: ${SOCIETY_INFO.venueGujarati}\n` +
+    `આપ સર્વે પરિવાર સાથે સમયસર આરતીમાં પધારશો એવી નમ્ર વિનંતી. 🪔\n` +
+    `— ${SOCIETY_INFO.name} સમિતિ`;
 }
+
+// Backwards compatibility alias
+export const buildWhatsAppMessage = buildSmsMessage;

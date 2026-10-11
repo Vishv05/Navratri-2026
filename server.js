@@ -13,62 +13,74 @@ const MIME_TYPES = {
 };
 
 /**
- * Load Meta WhatsApp API configuration
+ * Load SMS Gateway configuration (Fast2SMS / custom gateway)
  */
-function getMetaConfig() {
+function getSmsConfig() {
   let config = {
-    META_PHONE_NUMBER_ID: process.env.META_PHONE_NUMBER_ID || '',
-    META_ACCESS_TOKEN: process.env.META_ACCESS_TOKEN || '',
-    META_API_VERSION: process.env.META_API_VERSION || 'v19.0'
+    FAST2SMS_API_KEY: process.env.FAST2SMS_API_KEY || '',
+    SENDER_ID: process.env.SENDER_ID || 'FSTSMS',
+    ROUTE: process.env.ROUTE || 'q'
   };
 
   try {
-    const configPath = path.join(__dirname, 'meta-config.json');
+    const configPath = path.join(__dirname, 'sms-config.json');
     if (fs.existsSync(configPath)) {
       const fileContent = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       config = { ...config, ...fileContent };
     }
   } catch (err) {
-    console.warn('Could not read meta-config.json:', err.message);
+    console.warn('Could not read sms-config.json:', err.message);
   }
 
   return config;
 }
 
 /**
- * Send WhatsApp message via official Meta Graph API
+ * Send SMS via Telecom SMS Gateway (Fast2SMS Quick SMS / Unicode route)
+ * Never exposes or uses personal sender phone number.
  */
-async function sendMetaWhatsAppMessage({ phone, message }) {
-  const { META_PHONE_NUMBER_ID, META_ACCESS_TOKEN, META_API_VERSION } = getMetaConfig();
+async function sendSmsViaGateway({ phone, message, houseNo, dayNum }) {
+  const config = getSmsConfig();
+  const rawDigits = phone.replace(/[^0-9]/g, '');
+  const cleanPhone = rawDigits.slice(-10); // Standard 10-digit Indian mobile number
 
-  if (
-    !META_PHONE_NUMBER_ID ||
-    !META_ACCESS_TOKEN ||
-    META_PHONE_NUMBER_ID.includes('YOUR_META') ||
-    META_ACCESS_TOKEN.includes('YOUR_META')
-  ) {
-    throw new Error('META_CREDENTIALS_NOT_CONFIGURED');
+  if (!cleanPhone || cleanPhone.length !== 10) {
+    throw new Error(`Invalid 10-digit mobile number: ${phone}`);
   }
 
-  // Ensure recipient phone number has no + or spaces, e.g. 919825012345
-  const cleanPhone = phone.replace(/[^0-9]/g, '');
+  const apiKey = config.FAST2SMS_API_KEY;
 
-  const url = `https://graph.facebook.com/${META_API_VERSION}/${META_PHONE_NUMBER_ID}/messages`;
+  // If Fast2SMS API key is not configured, run in clean Simulation / Sandbox Mode
+  if (!apiKey || apiKey.includes('YOUR_FAST2SMS')) {
+    console.log(`\n📱 [SMS Gateway Simulation] Dispatching to +91-${cleanPhone} (House ${houseNo}, Day ${dayNum}):`);
+    console.log(`────────────────────────────────────────────────────────────`);
+    console.log(message);
+    console.log(`────────────────────────────────────────────────────────────`);
+    console.log(`ℹ️ [Sender Header: ${config.SENDER_ID}] (Your personal phone number is 100% hidden)\n`);
+
+    return {
+      success: true,
+      simulated: true,
+      phone: cleanPhone,
+      senderId: config.SENDER_ID,
+      message: 'SMS prepared and simulated successfully. Add your Fast2SMS API key in sms-config.json for live carrier delivery.'
+    };
+  }
+
+  // Live Carrier Dispatch via Fast2SMS Bulk V2 API
+  const url = 'https://www.fast2sms.com/dev/bulkV2';
   const payload = {
-    messaging_product: 'whatsapp',
-    recipient_type: 'individual',
-    to: cleanPhone,
-    type: 'text',
-    text: {
-      preview_url: false,
-      body: message
-    }
+    route: config.ROUTE || 'q', // Quick SMS Unicode route
+    message: message,
+    language: 'unicode',
+    flash: 0,
+    numbers: cleanPhone
   };
 
   const response = await fetch(url, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${META_ACCESS_TOKEN}`,
+      'authorization': apiKey,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(payload)
@@ -76,15 +88,21 @@ async function sendMetaWhatsAppMessage({ phone, message }) {
 
   const data = await response.json();
 
-  if (!response.ok) {
-    const errorMsg = data.error?.message || `Meta API Error (${response.status})`;
+  if (!response.ok || data.return === false) {
+    const errorMsg = data.message?.[0] || data.message || `SMS Gateway Error (${response.status})`;
     const err = new Error(errorMsg);
-    err.details = data.error;
+    err.details = data;
     err.status = response.status;
     throw err;
   }
 
-  return data;
+  console.log(`✅ [SMS Gateway] Live SMS delivered to +91-${cleanPhone} for House ${houseNo} (Day ${dayNum})`);
+  return {
+    success: true,
+    simulated: false,
+    phone: cleanPhone,
+    data
+  };
 }
 
 const server = http.createServer((req, res) => {
@@ -99,8 +117,8 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // API Endpoint: POST /api/send-whatsapp
-  if (req.method === 'POST' && req.url === '/api/send-whatsapp') {
+  // API Endpoint: POST /api/send-sms
+  if (req.method === 'POST' && req.url === '/api/send-sms') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
@@ -118,24 +136,19 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        const metaResult = await sendMetaWhatsAppMessage({ phone, message });
-        console.log(`✅ [Meta API] Message sent successfully to ${phone} for House ${houseNo} (Day ${dayNum})`);
+        const smsResult = await sendSmsViaGateway({ phone, message, houseNo, dayNum });
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          success: true, 
-          result: metaResult 
-        }));
+        res.end(JSON.stringify(smsResult));
 
       } catch (err) {
-        console.warn(`⚠️ [Meta API] Failed to send message:`, err.message);
+        console.warn(`⚠️ [SMS Gateway Error]:`, err.message);
 
-        const statusCode = err.status || 500;
+        const statusCode = err.status && err.status >= 400 && err.status < 600 ? err.status : 500;
         res.writeHead(statusCode, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           success: false,
           error: err.message,
-          code: err.details?.code || (err.message === 'META_CREDENTIALS_NOT_CONFIGURED' ? 'NOT_CONFIGURED' : 'API_ERROR'),
           details: err.details || null
         }));
       }

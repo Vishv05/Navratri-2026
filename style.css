@@ -36,8 +36,8 @@
   --status-live: #10b981;
   --status-warning: #f59e0b;
   --status-danger: #ef4444;
-  --whatsapp-green: #25d366;
-  --whatsapp-hover: #1ebd57;
+  --sms-blue: #2563eb;
+  --sms-hover: #1d4ed8;
 
   --shadow-card: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 20px rgba(255, 180, 0, 0.12);
   --shadow-glow: 0 0 15px rgba(255, 215, 0, 0.4);
@@ -1007,31 +1007,34 @@ body {
   color: #fff;
 }
 
-/* WhatsApp Reminder Button */
+/* SMS Reminder Button */
+.sms-reminder-btn,
 .wa-reminder-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   padding: 0.45rem 0.85rem;
-  background-color: var(--whatsapp-green);
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
   color: #ffffff;
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--radius-full);
   font-family: inherit;
   font-size: 0.825rem;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(37, 211, 102, 0.25);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
   transition: var(--transition);
   min-height: 40px;
 }
 
+.sms-reminder-btn:hover,
 .wa-reminder-btn:hover {
-  background-color: var(--whatsapp-hover);
+  background: linear-gradient(135deg, #1d4ed8, #1e40af);
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(37, 211, 102, 0.38);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.45);
 }
 
+.sms-reminder-btn:focus-visible,
 .wa-reminder-btn:focus-visible {
   outline: 2px solid #ffffff;
   outline-offset: 2px;
@@ -1567,15 +1570,17 @@ body {
   transform: translateY(-1px);
 }
 
+.btn-sms,
 .btn-whatsapp {
-  background: var(--whatsapp-green);
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
   color: #ffffff;
   font-weight: 700;
-  box-shadow: 0 4px 14px rgba(37, 211, 102, 0.3);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
 }
 
+.btn-sms:hover,
 .btn-whatsapp:hover {
-  background: var(--whatsapp-hover);
+  background: linear-gradient(135deg, #1d4ed8, #1e40af);
   transform: translateY(-1px);
 }
 
