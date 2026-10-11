@@ -58,6 +58,61 @@ export const HOUSE_CONTACTS = {
 };
 
 /**
+ * LocalStorage key for storing user-entered contacts
+ */
+const CONTACTS_STORAGE_KEY = "ghanshyamnagar_house_contacts_v2";
+
+/**
+ * Load saved contacts from localStorage into in-memory HOUSE_CONTACTS cache
+ */
+export function getSavedHouseContacts() {
+  try {
+    const raw = localStorage.getItem(CONTACTS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+/**
+ * Get contacts for a specific house (checks localStorage, then defaults)
+ */
+export function getHouseContacts(houseNo) {
+  const saved = getSavedHouseContacts();
+  if (saved[houseNo]) return saved[houseNo];
+  return HOUSE_CONTACTS[houseNo] || "";
+}
+
+/**
+ * Save contacts for a house to localStorage
+ */
+export function saveHouseContacts(houseNo, phoneData) {
+  try {
+    const saved = getSavedHouseContacts();
+    saved[houseNo] = phoneData;
+    localStorage.setItem(CONTACTS_STORAGE_KEY, JSON.stringify(saved));
+  } catch (e) {
+    console.warn("Could not save contact to localStorage:", e);
+  }
+}
+
+/**
+ * Format a phone number cleanly for UI display, e.g. 919825012345 -> +91 98250 12345
+ */
+export function formatPhoneDisplay(phone) {
+  if (!phone) return "";
+  const cleaned = String(phone).replace(/[^0-9]/g, "");
+  if (cleaned.length === 12 && cleaned.startsWith("91")) {
+    const sub = cleaned.slice(2);
+    return `+91 ${sub.slice(0, 5)} ${sub.slice(5)}`;
+  }
+  if (cleaned.length === 10) {
+    return `+91 ${cleaned.slice(0, 5)} ${cleaned.slice(5)}`;
+  }
+  return `+${cleaned}`;
+}
+
+/**
  * Helper to safely extract all individual valid phone numbers for a house
  * @param {string|string[]} rawContact 
  * @returns {string[]} Array of clean, 12-digit international numbers (e.g. ["919825012345", "919898012345"])

@@ -5,7 +5,17 @@
  * ES Module with vanilla JavaScript, Firebase Modular CDN, and local fallbacks.
  */
 
-import { SOCIETY_INFO, HOUSES, HOUSE_CONTACTS, SCHEDULE, buildWhatsAppMessage, extractPhoneNumbers } from "./data.js";
+import { 
+  SOCIETY_INFO, 
+  HOUSES, 
+  HOUSE_CONTACTS, 
+  SCHEDULE, 
+  buildWhatsAppMessage, 
+  extractPhoneNumbers,
+  getHouseContacts,
+  saveHouseContacts,
+  formatPhoneDisplay 
+} from "./data.js";
 import { firebaseConfig, FIRESTORE_SETTINGS, COMMITTEE_CONFIG } from "./firebase-config.js";
 
 // Official Firebase CDN Modular imports (ES Modules)
@@ -72,14 +82,22 @@ const DOM = {
   pinSubmitBtn: document.getElementById("pin-submit-btn"),
   pinCancelBtn: document.getElementById("pin-cancel-btn"),
   pinCloseBtn: document.getElementById("pin-modal-close"),
-  waModal: document.getElementById("whatsapp-modal"),
-  waModalHouse: document.getElementById("wa-modal-house"),
-  waModalDate: document.getElementById("wa-modal-date"),
-  waModalPhone: document.getElementById("wa-modal-phone"),
-  waPreview: document.getElementById("wa-message-preview"),
-  waModalActions: document.getElementById("wa-modal-actions"),
-  waCopyBtn: document.getElementById("wa-copy-btn"),
-  waCloseBtn: document.getElementById("wa-modal-close"),
+  // Aarti Selection Confirmation & Automated WhatsApp Modal
+  assignModal: document.getElementById("assign-confirm-modal"),
+  assignCloseBtn: document.getElementById("assign-confirm-close"),
+  confirmHouseHighlight: document.getElementById("confirm-house-highlight"),
+  confirmDateHighlight: document.getElementById("confirm-date-highlight"),
+  confirmCardHouse: document.getElementById("confirm-card-house"),
+  confirmCardNorata: document.getElementById("confirm-card-norata"),
+  confirmCardDate: document.getElementById("confirm-card-date"),
+  confirmPhone1: document.getElementById("confirm-phone-1"),
+  confirmPhone2: document.getElementById("confirm-phone-2"),
+  confirmPreview: document.getElementById("confirm-message-preview"),
+  confirmCopyBtn: document.getElementById("confirm-copy-btn"),
+  confirmErrorMsg: document.getElementById("confirm-error-msg"),
+  confirmModalActions: document.getElementById("confirm-modal-actions"),
+  confirmCancelBtn: document.getElementById("confirm-cancel-btn"),
+  confirmSubmitBtn: document.getElementById("confirm-submit-btn"),
   resetModal: document.getElementById("reset-confirm-modal"),
   resetConfirmBtn: document.getElementById("reset-confirm-btn"),
   resetCancelBtn: document.getElementById("reset-cancel-btn"),
@@ -456,6 +474,8 @@ function createAssignedBadge(dayNum, houseNo) {
   return badgeContainer;
 }
 
+let currentPromptContext = null;
+
 function createWhatsAppButton(dayNum, houseNo) {
   const btn = document.createElement("button");
   btn.type = "button";
@@ -464,7 +484,7 @@ function createWhatsAppButton(dayNum, houseNo) {
   btn.innerHTML = `<span>💬</span> <span>WhatsApp Reminder</span>`;
 
   btn.addEventListener("click", () => {
-    handleWhatsAppReminderAction(dayNum, houseNo);
+    openAssignmentConfirmationModal(dayNum, houseNo);
   });
 
   return btn;
@@ -486,75 +506,197 @@ function openWhatsAppUrl(url) {
 }
 
 /**
- * Handles WhatsApp Reminder button click:
- * - 1 phone number: Directly redirects to that number in WhatsApp!
- * - 0 numbers / placeholder: Directly opens WhatsApp with message prefilled!
- * - 2+ phone numbers: Opens quick modal to choose Number 1 or Number 2 with 1 tap.
+ * Prompt user before assigning house and sending automated WhatsApp reminder
  */
-function handleWhatsAppReminderAction(dayNum, houseNo) {
-  const day = SCHEDULE.find(d => d.dayNum === dayNum);
-  const rawContact = HOUSE_CONTACTS[houseNo];
-  const phones = extractPhoneNumbers(rawContact);
-  const message = buildWhatsAppMessage(dayNum, houseNo);
-
-  // Case 1: Exactly 1 valid phone number -> IMMEDIATELY REDIRECT TO WHATSAPP
-  if (phones.length === 1) {
-    const singlePhone = phones[0];
-    const waUrl = `https://wa.me/${singlePhone}?text=${encodeURIComponent(message)}`;
-    showToast(`WhatsApp તરફ લઈ જઈ રહ્યું છે: +${singlePhone}...`, "success");
-    openWhatsAppUrl(waUrl);
+function promptHouseAssignment(dayNum, houseNo) {
+  if (COMMITTEE_CONFIG.requirePinForEdits && !STATE.isCommitteeUnlocked) {
+    requestCommitteePin({ type: "assign_prompt", dayNum, houseNo });
     return;
   }
-
-  // Case 2: 2 or more phone numbers -> Show modal so user can tap Number 1 or Number 2
-  if (phones.length >= 2) {
-    openWhatsAppMultiModal(day, houseNo, phones, message);
-    return;
-  }
-
-  // Case 3: No number configured in data.js -> Redirect to WhatsApp contact selector
-  const universalUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
-  showToast(`WhatsApp તરફ લઈ જઈ રહ્યું છે (સંપર્ક પસંદ કરો)...`, "info");
-  openWhatsAppUrl(universalUrl);
+  openAssignmentConfirmationModal(dayNum, houseNo);
 }
 
-function openWhatsAppMultiModal(day, houseNo, phones, message) {
-  DOM.waModalHouse.textContent = houseNo;
-  DOM.waModalDate.textContent = `${day.norata} (${day.dateStr})`;
-  DOM.waPreview.value = message;
+/**
+ * Opens the bilingual confirmation modal asking the user to confirm that
+ * House No. will receive the WhatsApp reminder for their Aarti on their respective date.
+ */
+function openAssignmentConfirmationModal(dayNum, houseNo) {
+  const day = SCHEDULE.find(d => d.dayNum === dayNum);
+  if (!day) return;
 
-  DOM.waModalPhone.innerHTML = phones.map((p, idx) => `
-    <span class="phone-tag" style="margin-right: 6px;">નંબર ${idx + 1}: +${p}</span>
-  `).join("<br>");
+  currentPromptContext = { dayNum, houseNo, day };
 
-  DOM.waModalActions.innerHTML = "";
+  // Fetch linked contact numbers (from localStorage or defaults)
+  const contact = getHouseContacts(houseNo);
+  const phones = extractPhoneNumbers(contact);
 
-  const copyBtn = document.createElement("button");
-  copyBtn.type = "button";
-  copyBtn.className = "btn btn-secondary";
-  copyBtn.innerHTML = "મેસેજ કોપી કરો (Copy)";
-  copyBtn.addEventListener("click", () => {
-    navigator.clipboard.writeText(DOM.waPreview.value)
-      .then(() => showToast("📋 મેસેજ ક્લિપબોર્ડ પર કોપી થયો!", "success"))
-      .catch(() => showToast("મેસેજ કોપી કરવામાં ભૂલ થઈ.", "error"));
+  // Update notification banner (As explicitly requested by user)
+  DOM.confirmHouseHighlight.textContent = houseNo;
+  DOM.confirmDateHighlight.textContent = `${day.dateStr} - ${day.norataGu}`;
+
+  // Update details card
+  DOM.confirmCardHouse.textContent = houseNo;
+  DOM.confirmCardNorata.innerHTML = `${day.norataEn} <span style="font-size: 0.85em; opacity: 0.9;">(${day.norataGu})</span>`;
+  DOM.confirmCardDate.textContent = `${day.dateStr} [${day.dayName}]`;
+
+  // Pre-fill phone number inputs
+  let p1Val = "";
+  let p2Val = "";
+  if (phones.length >= 1) {
+    p1Val = phones[0].startsWith("91") ? phones[0].slice(2) : phones[0];
+  }
+  if (phones.length >= 2) {
+    p2Val = phones[1].startsWith("91") ? phones[1].slice(2) : phones[1];
+  }
+  DOM.confirmPhone1.value = p1Val;
+  DOM.confirmPhone2.value = p2Val;
+
+  // Build message preview
+  const message = buildWhatsAppMessage(dayNum, houseNo);
+  DOM.confirmPreview.value = message;
+
+  // Clear any errors
+  DOM.confirmErrorMsg.classList.add("hidden");
+  DOM.confirmErrorMsg.textContent = "";
+
+  // Render responsive action buttons
+  updatePromptActionButtons();
+
+  // Open modal
+  DOM.assignModal.showModal();
+}
+
+/**
+ * Dynamically re-renders the action buttons based on phone numbers entered in Phone 1 & Phone 2
+ */
+function updatePromptActionButtons() {
+  if (!currentPromptContext) return;
+  const { dayNum, houseNo } = currentPromptContext;
+
+  const raw1 = DOM.confirmPhone1.value.trim().replace(/[^0-9]/g, "");
+  const raw2 = DOM.confirmPhone2.value.trim().replace(/[^0-9]/g, "");
+
+  const p1 = raw1 ? (raw1.length === 10 ? "91" + raw1 : raw1) : null;
+  const p2 = raw2 ? (raw2.length === 10 ? "91" + raw2 : raw2) : null;
+
+  DOM.confirmModalActions.innerHTML = "";
+
+  // Cancel Button
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "btn btn-secondary";
+  cancelBtn.textContent = "✕ રદ કરો (Cancel)";
+  cancelBtn.addEventListener("click", () => {
+    DOM.assignModal.close();
+    showToast("પસંદગી રદ કરવામાં આવી.", "info");
   });
-  DOM.waModalActions.appendChild(copyBtn);
+  DOM.confirmModalActions.appendChild(cancelBtn);
 
-  phones.forEach((p, idx) => {
-    const waUrl = `https://wa.me/${p}?text=${encodeURIComponent(message)}`;
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn btn-whatsapp";
-    btn.style.whiteSpace = "normal";
-    btn.innerHTML = `📱 WhatsApp: +${p} (નંબર ${idx + 1}) 🚀`;
-    btn.addEventListener("click", () => {
-      openWhatsAppUrl(waUrl);
-      DOM.waModal.close();
+  if (p1 && p2) {
+    // Both phone numbers available: Provide 1-tap options for Number 1, Number 2, or Both!
+    const btn1 = document.createElement("button");
+    btn1.type = "button";
+    btn1.className = "btn btn-whatsapp";
+    btn1.innerHTML = `<span>📱 નંબર ૧ (${formatPhoneDisplay(p1)}) પર મોકલો 🚀</span>`;
+    btn1.addEventListener("click", () => {
+      confirmAndExecuteAssignment(dayNum, houseNo, [p1]);
     });
-    DOM.waModalActions.appendChild(btn);
-  });
+    DOM.confirmModalActions.appendChild(btn1);
 
-  DOM.waModal.showModal();
+    const btn2 = document.createElement("button");
+    btn2.type = "button";
+    btn2.className = "btn btn-whatsapp";
+    btn2.innerHTML = `<span>📱 નંબર ૨ (${formatPhoneDisplay(p2)}) પર મોકલો 🚀</span>`;
+    btn2.addEventListener("click", () => {
+      confirmAndExecuteAssignment(dayNum, houseNo, [p2]);
+    });
+    DOM.confirmModalActions.appendChild(btn2);
+
+    const btnBoth = document.createElement("button");
+    btnBoth.type = "button";
+    btnBoth.className = "btn btn-primary";
+    btnBoth.innerHTML = `<span>🌟 બંને નંબર પર મોકલો (Send Both) 🚀</span>`;
+    btnBoth.addEventListener("click", () => {
+      confirmAndExecuteAssignment(dayNum, houseNo, [p1, p2]);
+    });
+    DOM.confirmModalActions.appendChild(btnBoth);
+
+  } else {
+    // 1 number or user typed number
+    const submitBtn = document.createElement("button");
+    submitBtn.type = "button";
+    submitBtn.className = "btn btn-whatsapp";
+    const labelNum = p1 ? ` (${formatPhoneDisplay(p1)})` : "";
+    submitBtn.innerHTML = `<span>✅ કન્ફર્મ કરો અને WhatsApp મોકલો${labelNum} 🚀</span>`;
+    submitBtn.addEventListener("click", () => {
+      const activeRaw1 = DOM.confirmPhone1.value.trim().replace(/[^0-9]/g, "");
+      const activeRaw2 = DOM.confirmPhone2.value.trim().replace(/[^0-9]/g, "");
+      const targets = [];
+      if (activeRaw1) targets.push(activeRaw1.length === 10 ? "91" + activeRaw1 : activeRaw1);
+      if (activeRaw2) targets.push(activeRaw2.length === 10 ? "91" + activeRaw2 : activeRaw2);
+      confirmAndExecuteAssignment(dayNum, houseNo, targets);
+    });
+    DOM.confirmModalActions.appendChild(submitBtn);
+  }
+}
+
+/**
+ * Saves assignment to Firestore and automatically triggers WhatsApp redirect
+ */
+async function confirmAndExecuteAssignment(dayNum, houseNo, phoneTargets) {
+  // 1. Save entered phone numbers to persistent storage
+  const p1Raw = DOM.confirmPhone1.value.trim();
+  const p2Raw = DOM.confirmPhone2.value.trim();
+  const combinedContacts = [p1Raw, p2Raw].filter(Boolean).join(" / ");
+  if (combinedContacts) {
+    saveHouseContacts(houseNo, combinedContacts);
+  }
+
+  // 2. Perform the assignment (syncs to Firestore & updates UI)
+  await performHouseAssignment(dayNum, houseNo);
+
+  // 3. Build WhatsApp message
+  const message = buildWhatsAppMessage(dayNum, houseNo);
+
+  // 4. Automatically trigger WhatsApp send
+  if (phoneTargets && phoneTargets.length > 0) {
+    const firstPhone = phoneTargets[0];
+    const waUrl1 = `https://api.whatsapp.com/send?phone=${firstPhone}&text=${encodeURIComponent(message)}`;
+    
+    showToast(`🚀 મકાન નં. ${houseNo} માટે WhatsApp ખૂલી રહ્યું છે: ${formatPhoneDisplay(firstPhone)}`, "success");
+    openWhatsAppUrl(waUrl1);
+
+    // If second phone requested, show persistent quick-trigger for number 2
+    if (phoneTargets.length > 1) {
+      const secondPhone = phoneTargets[1];
+      const waUrl2 = `https://api.whatsapp.com/send?phone=${secondPhone}&text=${encodeURIComponent(message)}`;
+      setTimeout(() => {
+        showToast(`📲 નંબર ૨ (${formatPhoneDisplay(secondPhone)}) માટે WhatsApp મોકલવા અહીં ક્લિક કરો`, "info");
+        const notifyBtn = document.createElement("button");
+        notifyBtn.className = "btn btn-whatsapp";
+        notifyBtn.style.position = "fixed";
+        notifyBtn.style.bottom = "80px";
+        notifyBtn.style.right = "20px";
+        notifyBtn.style.zIndex = "9999";
+        notifyBtn.style.boxShadow = "0 6px 20px rgba(0,0,0,0.5)";
+        notifyBtn.innerHTML = `📱 નંબર ૨ પર પણ મોકલો (${formatPhoneDisplay(secondPhone)}) 🚀`;
+        notifyBtn.onclick = () => {
+          openWhatsAppUrl(waUrl2);
+          notifyBtn.remove();
+        };
+        document.body.appendChild(notifyBtn);
+        setTimeout(() => notifyBtn.remove(), 12000);
+      }, 1500);
+    }
+  } else {
+    // If no phone number was entered, open universal WhatsApp selector so user can pick contact
+    const universalUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+    showToast(`WhatsApp તરફ લઈ જઈ રહ્યું છે (સંપર્ક પસંદ કરો)...`, "info");
+    openWhatsAppUrl(universalUrl);
+  }
+
+  // Close modal
+  DOM.assignModal.close();
 }
 
 function createCustomDropdown(dayNum, assignedHousesMap) {
@@ -604,14 +746,14 @@ function createCustomDropdown(dayNum, assignedHousesMap) {
       option.addEventListener("click", (e) => {
         e.stopPropagation();
         closeAllDropdowns();
-        performHouseAssignment(dayNum, house);
+        promptHouseAssignment(dayNum, house);
       });
 
       option.addEventListener("keydown", (e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           closeAllDropdowns();
-          performHouseAssignment(dayNum, house);
+          promptHouseAssignment(dayNum, house);
         }
       });
     }
@@ -721,6 +863,8 @@ async function verifyCommitteePin() {
         STATE.pendingAction = null;
         if (action.type === "assign") {
           performHouseAssignment(action.dayNum, action.houseNo);
+        } else if (action.type === "assign_prompt") {
+          openAssignmentConfirmationModal(action.dayNum, action.houseNo);
         } else if (action.type === "reset") {
           DOM.resetModal.showModal();
         }
@@ -743,6 +887,18 @@ async function verifyCommitteePin() {
       updateCommitteeToolbarState(true);
       DOM.pinModal.close();
       showToast("🔓 Committee Unlocked!", "success");
+
+      if (STATE.pendingAction) {
+        const action = STATE.pendingAction;
+        STATE.pendingAction = null;
+        if (action.type === "assign") {
+          performHouseAssignment(action.dayNum, action.houseNo);
+        } else if (action.type === "assign_prompt") {
+          openAssignmentConfirmationModal(action.dayNum, action.houseNo);
+        } else if (action.type === "reset") {
+          DOM.resetModal.showModal();
+        }
+      }
     }
   }
 }
@@ -902,7 +1058,24 @@ function initModals() {
   DOM.pinCancelBtn.addEventListener("click", () => DOM.pinModal.close());
   DOM.pinCloseBtn.addEventListener("click", () => DOM.pinModal.close());
 
-  DOM.waCloseBtn.addEventListener("click", () => DOM.waModal.close());
+  // Aarti selection confirmation & automated WhatsApp modal
+  DOM.assignCloseBtn.addEventListener("click", () => {
+    DOM.assignModal.close();
+    showToast("પસંદગી રદ કરવામાં આવી.", "info");
+  });
+  DOM.confirmCancelBtn.addEventListener("click", () => {
+    DOM.assignModal.close();
+    showToast("પસંદગી રદ કરવામાં આવી.", "info");
+  });
+  DOM.confirmCopyBtn.addEventListener("click", () => {
+    navigator.clipboard.writeText(DOM.confirmPreview.value)
+      .then(() => showToast("📋 મેસેજ ક્લિપબોર્ડ પર કોપી થયો!", "success"))
+      .catch(() => showToast("મેસેજ કોપી કરવામાં ભૂલ થઈ.", "error"));
+  });
+
+  // Re-calculate button states on typing mobile numbers
+  DOM.confirmPhone1.addEventListener("input", updatePromptActionButtons);
+  DOM.confirmPhone2.addEventListener("input", updatePromptActionButtons);
 
   DOM.resetConfirmBtn.addEventListener("click", () => {
     DOM.resetModal.close();

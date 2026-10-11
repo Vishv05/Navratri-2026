@@ -320,45 +320,108 @@
     </div>
   </dialog>
 
-  <!-- WhatsApp Reminder Preview & Send Dialog -->
-  <dialog id="whatsapp-modal" class="custom-modal" aria-labelledby="wa-modal-title">
+  <!-- Aarti Selection Confirmation & Automated WhatsApp Dialog -->
+  <dialog id="assign-confirm-modal" class="custom-modal" aria-labelledby="assign-confirm-title">
     <div class="modal-card modal-card-wide">
       <div class="modal-header wa-header">
-        <div class="modal-icon-badge wa-badge">💬</div>
-        <h3 id="wa-modal-title">WhatsApp સ્મરણપત્ર મોકલો<br><span class="modal-subtitle">Send Navratri Aarti Reminder</span></h3>
-        <button type="button" class="modal-close-btn" id="wa-modal-close" aria-label="Close WhatsApp modal">✕</button>
+        <div class="modal-icon-badge wa-badge">🪔</div>
+        <div class="modal-title-wrap">
+          <h3 id="assign-confirm-title">આરતી ફાળવણી અને WhatsApp રિમાઇન્ડર<br><span class="modal-subtitle">Aarti Selection & Automated WhatsApp Reminder</span></h3>
+        </div>
+        <button type="button" class="modal-close-btn" id="assign-confirm-close" aria-label="Close modal">✕</button>
       </div>
+
       <div class="modal-body">
-        <div class="wa-recipient-bar">
-          <div class="wa-recipient-item">
-            <span class="label">મકાન નંબર:</span>
-            <strong id="wa-modal-house">C-XXX</strong>
-          </div>
-          <div class="wa-recipient-item">
-            <span class="label">નોરતું / તારીખ:</span>
-            <strong id="wa-modal-date">Day X</strong>
-          </div>
-          <div class="wa-recipient-item">
-            <span class="label">WhatsApp નંબર:</span>
-            <strong id="wa-modal-phone" class="phone-tag">+91 XXXXXXXXXX</strong>
+        <!-- Prominent Notification Banner as requested by user -->
+        <div class="assign-confirm-alert" role="alert">
+          <div class="alert-icon-col">📢</div>
+          <div class="alert-content-col">
+            <p class="alert-headline-gu">
+              <strong>ધ્યાન આપો:</strong> તમે પસંદ કરેલ મકાન નંબર (<span id="confirm-house-highlight" class="alert-highlight">C-XXX</span>) ને તેમની આરતીની તારીખ (<span id="confirm-date-highlight" class="alert-highlight">Day X</span>) માટે WhatsApp પર આરતીનું રિમાઇન્ડર આપોઆપ મોકલવામાં આવશે.
+            </p>
+            <p class="alert-headline-en">
+              The house no. you have selected will get the WhatsApp message as the reminder for their Aarti on their respective date.
+            </p>
           </div>
         </div>
 
+        <!-- Aarti Details Grid -->
+        <div class="confirm-details-grid">
+          <div class="confirm-detail-item">
+            <span class="detail-label">🏠 મકાન નંબર:</span>
+            <strong class="detail-value" id="confirm-card-house">C-XXX</strong>
+          </div>
+          <div class="confirm-detail-item">
+            <span class="detail-label">🪔 નોરતું:</span>
+            <strong class="detail-value notranslate" translate="no" id="confirm-card-norata">First Noratu (પહેલું નોરતું)</strong>
+          </div>
+          <div class="confirm-detail-item">
+            <span class="detail-label">📅 તારીખ અને વાર:</span>
+            <strong class="detail-value" id="confirm-card-date">11 Oct 2026</strong>
+          </div>
+          <div class="confirm-detail-item">
+            <span class="detail-label">⏰ આરતી સમય:</span>
+            <strong class="detail-value">સાંજે ૮:૦૦ વાગ્યાથી (8:00 PM)</strong>
+          </div>
+        </div>
+
+        <!-- WhatsApp Phone Numbers Section -->
+        <div class="confirm-phone-section">
+          <div class="phone-section-header">
+            <span class="phone-icon">📱</span>
+            <label class="phone-header-label">WhatsApp સંપર્ક નંબર (WhatsApp Contact Numbers):</label>
+          </div>
+
+          <div class="phone-inputs-container">
+            <div class="phone-input-group">
+              <label for="confirm-phone-1" class="sub-phone-label">નંબર ૧ (Phone 1):</label>
+              <div class="phone-input-field">
+                <span class="country-prefix">+91</span>
+                <input 
+                  type="tel" 
+                  id="confirm-phone-1" 
+                  maxlength="15" 
+                  placeholder="10-અંકનો મોબાઈલ નંબર (દા.ત. 9825012345)" 
+                  autocomplete="tel"
+                >
+              </div>
+            </div>
+
+            <div class="phone-input-group">
+              <label for="confirm-phone-2" class="sub-phone-label">નંબર ૨ (Phone 2 - વૈકલ્પિક):</label>
+              <div class="phone-input-field">
+                <span class="country-prefix">+91</span>
+                <input 
+                  type="tel" 
+                  id="confirm-phone-2" 
+                  maxlength="15" 
+                  placeholder="બીજો નંબર જો ઉપલબ્ધ હોય તો" 
+                  autocomplete="tel"
+                >
+              </div>
+            </div>
+          </div>
+          <p class="phone-save-hint">💡 <em>દાખલ કરેલ નંબર આ મકાન માટે આપોઆપ સેવ થઈ જશે (Auto-saved).</em></p>
+        </div>
+
+        <!-- WhatsApp Message Preview -->
         <div class="wa-preview-container">
-          <label for="wa-message-preview" class="preview-label">સંદેશાનું પૂર્વાવલોકન (Message Preview):</label>
-          <textarea id="wa-message-preview" class="wa-textarea" readonly rows="9"></textarea>
+          <div class="preview-header-row">
+            <label for="confirm-message-preview" class="preview-label">મોકલવામાં આવનાર સંદેશો (Message to be sent):</label>
+            <button type="button" class="btn-copy-preview" id="confirm-copy-btn">📋 મેસેજ કોપી કરો</button>
+          </div>
+          <textarea id="confirm-message-preview" class="wa-textarea" readonly rows="7"></textarea>
         </div>
 
-        <div class="wa-honest-note" role="note">
-          <span class="note-icon">ℹ️</span>
-          <span>
-            <strong>મહત્વપૂર્ણ નોંધ:</strong> "WhatsApp ખોલો" પર ક્લિક કરવાથી તમારા ફોન અથવા કોમ્પ્યુટરમાં WhatsApp આ સંદેશ સાથે આપમેળે ખૂલશે. તમારે ફક્ત "Send" બટન દબાવવાનું રહેશે. (કોઈપણ વેબસાઇટ વપરાશકર્તાની મંજૂરી વિના સીધા મેસેજ મોકલી શકતી નથી).
-          </span>
-        </div>
+        <p class="confirm-error-text hidden" id="confirm-error-msg"></p>
       </div>
-      <div class="modal-actions">
-        <button type="button" class="btn btn-secondary" id="wa-copy-btn">મેસેજ કોપી કરો (Copy)</button>
-        <button type="button" class="btn btn-whatsapp" id="wa-open-btn">WhatsApp ખોલો (Open WhatsApp) 🚀</button>
+
+      <!-- Action Buttons -->
+      <div class="modal-actions confirm-modal-actions" id="confirm-modal-actions">
+        <button type="button" class="btn btn-secondary" id="confirm-cancel-btn">✕ રદ કરો (Cancel)</button>
+        <button type="button" class="btn btn-whatsapp" id="confirm-submit-btn">
+          <span>✅ કન્ફર્મ કરો અને WhatsApp મોકલો 🚀</span>
+        </button>
       </div>
     </div>
   </dialog>
