@@ -1,0 +1,28 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /navratri2026/assignments {
+      allow read: if true;
+      allow write: if 
+        request.resource.data.keys().hasOnly(['day1', 'day2', 'day3', 'day4', 'day5', 'day6', 'day7', 'day8', 'day9']) &&
+        isValidHouse(request.resource.data.day1) &&
+        isValidHouse(request.resource.data.day2) &&
+        isValidHouse(request.resource.data.day3) &&
+        isValidHouse(request.resource.data.day4) &&
+        isValidHouse(request.resource.data.day5) &&
+        isValidHouse(request.resource.data.day6) &&
+        isValidHouse(request.resource.data.day7) &&
+        isValidHouse(request.resource.data.day8) &&
+        isValidHouse(request.resource.data.day9);
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+    function isValidHouse(val) {
+      return val == null || (
+        val is string && 
+        val.matches('^C-2(79|8[0-9]|9[0-4])$')
+      );
+    }
+  }
+}
