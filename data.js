@@ -293,14 +293,31 @@ export function buildSmsMessage(dayNum, houseNo) {
   const day = SCHEDULE.find(d => d.dayNum === dayNum);
   if (!day) return "";
 
-  return `જય માતાજી! 🙏\n` +
+  const dayOfWeekEn = day.dayName ? day.dayName.split(' ')[0] : '';
+  const dayOfWeekGu = day.dayNameGujarati || (day.dayName ? day.dayName.replace(/^[^(]+\(|\)/g, '') : '');
+
+  // English section (top)
+  const englishSection =
+    `Jai Mataji! 🙏\n` +
+    `Navratri 2026 Aarti Invitation - House No. ${houseNo}\n` +
+    `✨ Noratu: ${day.norataEn || day.norata}\n` +
+    `📅 Date: ${day.dateStr} (${dayOfWeekEn})\n` +
+    `⏰ Time: ${SOCIETY_INFO.aartiTime}\n` +
+    `📍 Venue: ${SOCIETY_INFO.venue}\n` +
+    `You and your family are cordially invited for the evening Aarti. 🪔`;
+
+  // Gujarati section (below)
+  const gujaratiSection =
+    `જય માતાજી! 🙏\n` +
     `મકાન નં. ${houseNo} માટે આરતી વિગત:\n` +
-    `✨ નોરતું: ${day.norataGu} (${day.norataEn})\n` +
-    `📅 તારીખ: ${day.dateStr} [${day.dayName}]\n` +
-    `⏰ સમય: ${SOCIETY_INFO.aartiTimeGujarati} (${SOCIETY_INFO.aartiTime})\n` +
+    `✨ નોરતું: ${day.norataGu || day.norata}\n` +
+    `📅 તારીખ: ${day.dateStr} [${dayOfWeekGu}]\n` +
+    `⏰ સમય: ${SOCIETY_INFO.aartiTimeGujarati}\n` +
     `📍 સ્થળ: ${SOCIETY_INFO.venueGujarati}\n` +
     `આપ સર્વે પરિવાર સાથે સમયસર આરતીમાં પધારશો એવી નમ્ર વિનંતી. 🪔\n` +
     `— ${SOCIETY_INFO.name} સમિતિ`;
+
+  return `${englishSection}\n\n------------------------\n\n${gujaratiSection}`;
 }
 
 // Backwards compatibility alias
