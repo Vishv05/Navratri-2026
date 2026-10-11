@@ -461,19 +461,48 @@ function openWhatsAppUrl(url) {
 
 /**
  * Sends a WhatsApp Aarti reminder directly to the WhatsApp Number linked with House No. in data.js.
- * Zero pop-ups!
+ * Attempts Backend Meta Business Cloud API first. If Meta API is unconfigured or unreachable,
+ * automatically falls back to direct WhatsApp so the message is always delivered.
  */
-function sendWhatsAppToHouse(dayNum, houseNo) {
+async function sendWhatsAppToHouse(dayNum, houseNo) {
   if (!houseNo) return;
   const rawContact = HOUSE_CONTACTS[houseNo];
   const phones = extractPhoneNumbers(rawContact);
   const message = buildWhatsAppMessage(dayNum, houseNo);
+  const primaryPhone = phones.length > 0 ? phones[0] : null;
 
-  if (phones.length > 0) {
-    const primaryPhone = phones[0];
-    const waUrl = `https://api.whatsapp.com/send?phone=${primaryPhone}&text=${encodeURIComponent(message)}`;
-    showToast(`🚀 મકાન નં. ${houseNo} (+${primaryPhone}) માટે WhatsApp ખૂલી રહ્યું છે...`, "success");
-    openWhatsAppUrl(waUrl);
+  if (primaryPhone) {
+    showToast(`🚀 Backend Meta API દ્વારા WhatsApp મેસેજ મોકલાઈ રહ્યો છે (+${primaryPhone})...`, "info");
+
+    try {
+      const response = await fetch('/api/send-whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dayNum,
+          houseNo,
+          phone: primaryPhone,
+          message
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        showToast(`✅ Meta Business API દ્વારા WhatsApp મેસેજ આપોઆપ મોકલાઈ ગયો! 🪔`, "success");
+        return;
+      } else {
+        console.info("Meta API not configured or error returned, using direct WhatsApp:", data.error);
+        const waUrl = `https://api.whatsapp.com/send?phone=${primaryPhone}&text=${encodeURIComponent(message)}`;
+        showToast(`WhatsApp ખૂલી રહ્યું છે: +${primaryPhone}...`, "success");
+        openWhatsAppUrl(waUrl);
+      }
+    } catch (err) {
+      console.info("Backend unreachable, using direct WhatsApp:", err.message);
+      const waUrl = `https://api.whatsapp.com/send?phone=${primaryPhone}&text=${encodeURIComponent(message)}`;
+      showToast(`WhatsApp ખૂલી રહ્યું છે: +${primaryPhone}...`, "success");
+      openWhatsAppUrl(waUrl);
+    }
 
     // If house has 2 phone numbers in data.js, provide quick floating trigger for number 2 without popup
     if (phones.length > 1) {
@@ -495,7 +524,7 @@ function sendWhatsAppToHouse(dayNum, houseNo) {
         };
         document.body.appendChild(quickBtn);
         setTimeout(() => quickBtn.remove(), 12000);
-      }, 1200);
+      }, 1500);
     }
   } else {
     // If placeholder like 91XXXXXXXXXX or no digits in data.js, open universal WhatsApp URL with message so user can choose contact
