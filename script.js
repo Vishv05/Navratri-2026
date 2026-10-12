@@ -17,6 +17,7 @@ import {
   formatPhoneDisplay 
 } from "./data.js";
 import { firebaseConfig, FIRESTORE_SETTINGS, COMMITTEE_CONFIG } from "./firebase-config.js";
+import { WHATSAPP_CONFIG } from "./whatsapp-config.js";
 
 // Official Firebase CDN Modular imports (ES Modules)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
@@ -385,9 +386,11 @@ function renderSchedule() {
 
     if (assignedHouse) {
       const badge = createAssignedBadge(day.dayNum, assignedHouse);
-      const smsBtn = createSmsButton(day.dayNum, assignedHouse);
+      const waBtn = createWhatsAppButton(day.dayNum, assignedHouse);
+      const copyBtn = createCopyButton(day.dayNum, assignedHouse);
       wrapper.appendChild(badge);
-      wrapper.appendChild(smsBtn);
+      wrapper.appendChild(waBtn);
+      wrapper.appendChild(copyBtn);
     } else {
       const customSelect = createCustomDropdown(day.dayNum, currentAssignedHouses);
       wrapper.appendChild(customSelect);
@@ -445,10 +448,43 @@ function createAssignedBadge(dayNum, houseNo) {
 }
 
 /**
- * Sends an SMS Aarti reminder to the phone number(s) linked with House No. in data.js.
- * Delivered through Telecom SMS Gateway without exposing or using the sender's personal phone number.
+ * Copies the complete bilingual Aarti invitation to the user's clipboard.
+ * 100% Private - Never opens personal WhatsApp, never discloses phone numbers.
  */
-async function sendSmsToHouse(dayNum, houseNo) {
+function copyAartiDetails(dayNum, houseNo) {
+  if (!houseNo) return;
+  const message = buildSmsMessage(dayNum, houseNo);
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(message)
+      .then(() => {
+        showToast(`📋 મકાન નં. ${houseNo} માટે આરતીની વિગત કોપી થઈ ગઈ! 🪔`, "success");
+      })
+      .catch(() => {
+        fallbackCopyText(message);
+        showToast(`📋 મકાન નં. ${houseNo} માટે આરતીની વિગત કોપી થઈ ગઈ! 🪔`, "success");
+      });
+  } else {
+    fallbackCopyText(message);
+    showToast(`📋 મકાન નં. ${houseNo} માટે આરતીની વિગત કોપી થઈ ગઈ! 🪔`, "success");
+  }
+}
+
+function fallbackCopyText(text) {
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  textArea.style.position = "fixed";
+  textArea.style.left = "-9999px";
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  try {
+    document.execCommand("copy");
+  } catch (err) {}
+  document.body.removeChild(textArea);
+}
+
+async function sendWhatsAppViaBackend(dayNum, houseNo) {
   if (!houseNo) return;
   const rawContact = getHouseContacts(houseNo) || HOUSE_CONTACTS[houseNo];
   const phones = extractPhoneNumbers(rawContact);
@@ -456,87 +492,156 @@ async function sendSmsToHouse(dayNum, houseNo) {
   const primaryPhone = phones.length > 0 ? phones[0] : null;
 
   if (!primaryPhone) {
-    showToast(`⚠️ મકાન નં. ${houseNo} માટે કોઈ માન્ય ફોન નંબર નોંધાયેલ નથી.`, "error");
+    showToast(`⚠️ મકાન નં. ${houseNo} માટે કોઈ ફોન નંબર મળ્યો નથી.`, "error");
     return;
   }
 
-  showToast(`🚀 મકાન નં. ${houseNo} (+${primaryPhone}) પર SMS મોકલાઈ રહ્યો છે...`, "info");
+  showToast(`🚀 મકાન નં. ${houseNo} (+${primaryPhone}) પર Business WhatsApp મોકલાઈ રહ્યો છે...`, "info");
 
+  let sent = false;
+
+  // 1. Try local Node backend first (when running on localhost)
   try {
-    const response = await fetch('/api/send-sms', {
+    const res = await fetch('/api/send-whatsapp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        dayNum,
-        houseNo,
-        phone: primaryPhone,
-        message
-      })
+      body: JSON.stringify({ dayNum, houseNo, phone: primaryPhone, message, channel: 'whatsapp' })
     });
-
-    const data = await response.json();
-
-    if (response.ok && data.success) {
-      if (data.simulated) {
-        showToast(`✅ મકાન નં. ${houseNo} (+${primaryPhone}) માટે SMS રીમાઇન્ડર તૈયાર! 📱`, "success");
-      } else {
-        showToast(`✅ મકાન નં. ${houseNo} (+${primaryPhone}) પર SMS સફળતાપૂર્વક મોકલાઈ ગયો! 🪔`, "success");
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
+        sent = true;
+        if (data.simulated) {
+          showToast(`💬 [Sandbox] મકાન નં. ${houseNo} માટે WhatsApp તૈયાર!`, "info");
+        } else {
+          showToast(`✅ મકાન નં. ${houseNo} પર Business WhatsApp સફળતાપૂર્વક મોકલાઈ ગયું! 🪔`, "success");
+        }
       }
-    } else {
-      console.warn("SMS Gateway notice:", data);
-      showToast(`✅ મકાન નં. ${houseNo} માટે SMS મોકલવાની વિનંતી પૂર્ણ થઈ! 📱`, "success");
     }
-  } catch (err) {
-    console.info("SMS backend dispatch info:", err.message);
-    showToast(`✅ મકાન નં. ${houseNo} (+${primaryPhone}) માટે SMS રીમાઇન્ડર નોંધાયું! 📱`, "success");
+  } catch (e) {
+    // Local server not available, fall back to direct Cloud API
   }
 
-  // If house has 2 phone numbers in data.js, automatically send SMS to number 2 as well
+  // 2. Direct Meta Graph API call (Works directly on Live Firebase Hosting URL!)
+  if (!sent && WHATSAPP_CONFIG && WHATSAPP_CONFIG.TOKEN) {
+    try {
+      const dayData = SCHEDULE.find(d => d.dayNum === dayNum) || SCHEDULE[0];
+      const cleanDigits = String(primaryPhone).replace(/[^0-9]/g, "");
+      const cleanPhone = cleanDigits.length === 10 ? `91${cleanDigits}` : cleanDigits;
+
+      let payload;
+      if (WHATSAPP_CONFIG.TEMPLATE_NAME) {
+        payload = {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: cleanPhone,
+          type: 'template',
+          template: {
+            name: WHATSAPP_CONFIG.TEMPLATE_NAME,
+            language: { code: WHATSAPP_CONFIG.TEMPLATE_LANG || 'en' },
+            components: [
+              {
+                type: 'body',
+                parameters: [
+                  { type: 'text', text: houseNo || 'Member' },
+                  { type: 'text', text: dayData.norata },
+                  { type: 'text', text: dayData.dateStr }
+                ]
+              }
+            ]
+          }
+        };
+      } else {
+        payload = {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: cleanPhone,
+          type: 'text',
+          text: { preview_url: false, body: message }
+        };
+      }
+
+      const res = await fetch(`https://graph.facebook.com/v20.0/${WHATSAPP_CONFIG.PHONE_NUMBER_ID}/messages`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${WHATSAPP_CONFIG.TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (res.ok && data.messages) {
+        showToast(`✅ મકાન નં. ${houseNo} પર Business WhatsApp સફળતાપૂર્વક મોકલાઈ ગયું! 🪔`, "success");
+      } else {
+        const errMsg = data.error?.message || 'Meta API ભૂલ';
+        showToast(`⚠️ WhatsApp: ${errMsg}`, "error");
+      }
+    } catch (err) {
+      showToast(`⚠️ WhatsApp મોકલવામાં ક્ષતિ આવી: ${err.message}`, "error");
+    }
+  }
+
+  // If house has 2 phone numbers, send to number 2 as well
   if (phones.length > 1) {
     const secondPhone = phones[1];
     setTimeout(async () => {
       try {
-        await fetch('/api/send-sms', {
+        await fetch('/api/send-whatsapp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            dayNum,
-            houseNo,
-            phone: secondPhone,
-            message
-          })
+          body: JSON.stringify({ dayNum, houseNo, phone: secondPhone, message, channel: 'whatsapp' })
         });
-        showToast(`✅ નંબર ૨ (+${secondPhone}) પર પણ SMS મોકલાયો! 📱`, "info");
-      } catch (e) {
-        console.warn("Second phone SMS dispatch:", e);
-      }
+      } catch (e) {}
     }, 1200);
   }
 }
 
-function createSmsButton(dayNum, houseNo) {
+function createWhatsAppButton(dayNum, houseNo) {
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.className = "sms-reminder-btn";
-  btn.setAttribute("aria-label", `Send SMS reminder to ${houseNo}`);
-  btn.innerHTML = `<span>📱</span> <span>SMS Reminder</span>`;
+  btn.className = "wa-reminder-btn";
+  btn.setAttribute("aria-label", `Send Business WhatsApp to ${houseNo}`);
+  btn.title = `Send Aarti invitation to ${houseNo} from Business Account (Personal number hidden)`;
+  btn.innerHTML = `<span>💬</span> <span>WhatsApp Invite</span>`;
 
   btn.addEventListener("click", () => {
-    sendSmsToHouse(dayNum, houseNo);
+    sendWhatsAppViaBackend(dayNum, houseNo);
   });
 
   return btn;
 }
 
-function selectHouseAndSendSms(dayNum, houseNo) {
-  // 1. Immediately assign house to that day (syncs with Firestore)
+function createCopyButton(dayNum, houseNo) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "copy-invite-btn";
+  btn.setAttribute("aria-label", `Copy Aarti details for ${houseNo}`);
+  btn.title = `Copy invitation details for ${houseNo}`;
+  btn.innerHTML = `<span>📋</span> <span>Copy Details</span>`;
+
+  btn.addEventListener("click", () => {
+    copyAartiDetails(dayNum, houseNo);
+  });
+
+  return btn;
+}
+
+// Backwards compatibility aliases
+const createSmsButton = createWhatsAppButton;
+const sendWhatsAppToHouse = sendWhatsAppViaBackend;
+const sendSmsToHouse = sendWhatsAppViaBackend;
+
+function selectHouseAndSendWhatsApp(dayNum, houseNo) {
+  // Immediately assign house to that day (syncs with Firestore)
   performHouseAssignment(dayNum, houseNo);
 
-  // 2. Immediately send SMS to the number(s) linked in data.js
   if (houseNo) {
-    sendSmsToHouse(dayNum, houseNo);
+    showToast(`✅ મકાન નં. ${houseNo} સફળતાપૂર્વક ફાળવાયું! 🪔`, "success");
   }
 }
+
+// Backwards compatibility alias
+const selectHouseAndSendSms = selectHouseAndSendWhatsApp;
 
 function createCustomDropdown(dayNum, assignedHousesMap) {
   const container = document.createElement("div");
@@ -585,14 +690,14 @@ function createCustomDropdown(dayNum, assignedHousesMap) {
       option.addEventListener("click", (e) => {
         e.stopPropagation();
         closeAllDropdowns();
-        selectHouseAndSendSms(dayNum, house);
+        selectHouseAndSendWhatsApp(dayNum, house);
       });
 
       option.addEventListener("keydown", (e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           closeAllDropdowns();
-          selectHouseAndSendSms(dayNum, house);
+          selectHouseAndSendWhatsApp(dayNum, house);
         }
       });
     }

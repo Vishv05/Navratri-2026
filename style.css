@@ -1007,14 +1007,13 @@ body {
   color: #fff;
 }
 
-/* SMS Reminder Button */
+/* SMS & WhatsApp Reminder Buttons */
 .sms-reminder-btn,
 .wa-reminder-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   padding: 0.45rem 0.85rem;
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
   color: #ffffff;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--radius-full);
@@ -1022,18 +1021,46 @@ body {
   font-size: 0.825rem;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
   transition: var(--transition);
   min-height: 40px;
 }
 
-.sms-reminder-btn:hover,
-.wa-reminder-btn:hover {
+.sms-reminder-btn {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+}
+
+.sms-reminder-btn:hover {
   background: linear-gradient(135deg, #1d4ed8, #1e40af);
   transform: translateY(-1px);
   box-shadow: 0 6px 16px rgba(37, 99, 235, 0.45);
 }
 
+.copy-invite-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.85rem;
+  background: rgba(217, 119, 6, 0.15);
+  color: var(--gold-primary);
+  border: 1px solid var(--gold-border);
+  border-radius: var(--radius-full);
+  font-family: inherit;
+  font-size: 0.825rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition);
+  min-height: 40px;
+}
+
+.copy-invite-btn:hover {
+  background: rgba(217, 119, 6, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.25);
+  color: #fff;
+}
+
+.copy-invite-btn:focus-visible,
 .sms-reminder-btn:focus-visible,
 .wa-reminder-btn:focus-visible {
   outline: 2px solid #ffffff;

@@ -1,5 +1,6 @@
 node_modules/
 sms-config.json
+whatsapp-config.json
 meta-config.json
 .env
 *.log
