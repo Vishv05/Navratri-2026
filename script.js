@@ -261,7 +261,9 @@ async function performHouseAssignment(dayNum, houseNo) {
       });
 
       if (houseNo) {
-        showToast(`✅ મકાન નં. ${houseNo} દિવસ ${dayNum} માટે સફળતાપૂર્વક ફાળવાયું!`, "success");
+        showToast(`✅ મકાન નં. ${houseNo} દિવસ ${dayNum} માટે ફાળવાયું! 🪔`, "success");
+        // Option 1: Automatically dispatch WhatsApp invitation to linked phone number
+        sendWhatsAppViaBackend(dayNum, houseNo);
       } else {
         showToast(`દિવસ ${dayNum} ની ફાળવણી રદ કરવામાં આવી.`, "info");
       }
@@ -286,7 +288,9 @@ async function performHouseAssignment(dayNum, houseNo) {
     renderSchedule();
 
     if (houseNo) {
-      showToast(`✅ મકાન નં. ${houseNo} દિવસ ${dayNum} માટે પસંદ થયું!`, "success");
+      showToast(`✅ મકાન નં. ${houseNo} દિવસ ${dayNum} માટે પસંદ થયું! 🪔`, "success");
+      // Option 1: Automatically dispatch WhatsApp invitation to linked phone number
+      sendWhatsAppViaBackend(dayNum, houseNo);
     } else {
       showToast(`દિવસ ${dayNum} ની પસંદગી ખાલી કરવામાં આવી.`, "info");
     }
@@ -582,12 +586,8 @@ const sendWhatsAppToHouse = sendWhatsAppViaBackend;
 const sendSmsToHouse = sendWhatsAppViaBackend;
 
 function selectHouseAndSendWhatsApp(dayNum, houseNo) {
-  // Immediately assign house to that day (syncs with Firestore)
+  // Assign house to that day (syncs with Firestore and automatically sends WhatsApp invitation)
   performHouseAssignment(dayNum, houseNo);
-
-  if (houseNo) {
-    showToast(`✅ મકાન નં. ${houseNo} સફળતાપૂર્વક ફાળવાયું! 🪔`, "success");
-  }
 }
 
 // Backwards compatibility alias
