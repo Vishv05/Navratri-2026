@@ -387,10 +387,8 @@ function renderSchedule() {
     if (assignedHouse) {
       const badge = createAssignedBadge(day.dayNum, assignedHouse);
       const waBtn = createWhatsAppButton(day.dayNum, assignedHouse);
-      const copyBtn = createCopyButton(day.dayNum, assignedHouse);
       wrapper.appendChild(badge);
       wrapper.appendChild(waBtn);
-      wrapper.appendChild(copyBtn);
     } else {
       const customSelect = createCustomDropdown(day.dayNum, currentAssignedHouses);
       wrapper.appendChild(customSelect);
@@ -447,43 +445,6 @@ function createAssignedBadge(dayNum, houseNo) {
   return badgeContainer;
 }
 
-/**
- * Copies the complete bilingual Aarti invitation to the user's clipboard.
- * 100% Private - Never opens personal WhatsApp, never discloses phone numbers.
- */
-function copyAartiDetails(dayNum, houseNo) {
-  if (!houseNo) return;
-  const message = buildSmsMessage(dayNum, houseNo);
-
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(message)
-      .then(() => {
-        showToast(`📋 મકાન નં. ${houseNo} માટે આરતીની વિગત કોપી થઈ ગઈ! 🪔`, "success");
-      })
-      .catch(() => {
-        fallbackCopyText(message);
-        showToast(`📋 મકાન નં. ${houseNo} માટે આરતીની વિગત કોપી થઈ ગઈ! 🪔`, "success");
-      });
-  } else {
-    fallbackCopyText(message);
-    showToast(`📋 મકાન નં. ${houseNo} માટે આરતીની વિગત કોપી થઈ ગઈ! 🪔`, "success");
-  }
-}
-
-function fallbackCopyText(text) {
-  const textArea = document.createElement("textarea");
-  textArea.value = text;
-  textArea.style.position = "fixed";
-  textArea.style.left = "-9999px";
-  document.body.appendChild(textArea);
-  textArea.focus();
-  textArea.select();
-  try {
-    document.execCommand("copy");
-  } catch (err) {}
-  document.body.removeChild(textArea);
-}
-
 async function sendWhatsAppViaBackend(dayNum, houseNo) {
   if (!houseNo) return;
   const rawContact = getHouseContacts(houseNo) || HOUSE_CONTACTS[houseNo];
@@ -523,14 +484,15 @@ async function sendWhatsAppViaBackend(dayNum, houseNo) {
   }
 
   // 2. Direct Meta Graph API call (Works directly on Live Firebase Hosting URL!)
-  if (!sent && WHATSAPP_CONFIG && WHATSAPP_CONFIG.TOKEN) {
+  const activeToken = (typeof localStorage !== "undefined" && localStorage.getItem("meta_wa_token")) || (WHATSAPP_CONFIG && WHATSAPP_CONFIG.TOKEN);
+  if (!sent && activeToken) {
     try {
       const dayData = SCHEDULE.find(d => d.dayNum === dayNum) || SCHEDULE[0];
       const cleanDigits = String(primaryPhone).replace(/[^0-9]/g, "");
       const cleanPhone = cleanDigits.length === 10 ? `91${cleanDigits}` : cleanDigits;
 
       let payload;
-      if (WHATSAPP_CONFIG.TEMPLATE_NAME) {
+      if (WHATSAPP_CONFIG && WHATSAPP_CONFIG.TEMPLATE_NAME) {
         payload = {
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
@@ -561,10 +523,11 @@ async function sendWhatsAppViaBackend(dayNum, houseNo) {
         };
       }
 
-      const res = await fetch(`https://graph.facebook.com/v20.0/${WHATSAPP_CONFIG.PHONE_NUMBER_ID}/messages`, {
+      const phoneNumberId = (WHATSAPP_CONFIG && WHATSAPP_CONFIG.PHONE_NUMBER_ID) || "1296935796847222";
+      const res = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}/messages`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${WHATSAPP_CONFIG.TOKEN}`,
+          'Authorization': `Bearer ${activeToken}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(payload)
@@ -579,6 +542,8 @@ async function sendWhatsAppViaBackend(dayNum, houseNo) {
     } catch (err) {
       showToast(`⚠️ WhatsApp મોકલવામાં ક્ષતિ આવી: ${err.message}`, "error");
     }
+  } else if (!sent) {
+    showToast(`ℹ️ WhatsApp: મોકલવા માટે Meta API Access Token જરૂરી છે.`, "info");
   }
 
   // If house has 2 phone numbers, send to number 2 as well
@@ -600,27 +565,12 @@ function createWhatsAppButton(dayNum, houseNo) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "wa-reminder-btn";
-  btn.setAttribute("aria-label", `Send Business WhatsApp to ${houseNo}`);
-  btn.title = `Send Aarti invitation to ${houseNo} from Business Account (Personal number hidden)`;
-  btn.innerHTML = `<span>💬</span> <span>WhatsApp Invite</span>`;
+  btn.setAttribute("aria-label", `Send WhatsApp Invite to ${houseNo}`);
+  btn.title = `Send Aarti invitation to ${houseNo} via WhatsApp`;
+  btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.557 6.557 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592z"/></svg><span>WhatsApp Invite</span>`;
 
   btn.addEventListener("click", () => {
     sendWhatsAppViaBackend(dayNum, houseNo);
-  });
-
-  return btn;
-}
-
-function createCopyButton(dayNum, houseNo) {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "copy-invite-btn";
-  btn.setAttribute("aria-label", `Copy Aarti details for ${houseNo}`);
-  btn.title = `Copy invitation details for ${houseNo}`;
-  btn.innerHTML = `<span>📋</span> <span>Copy Details</span>`;
-
-  btn.addEventListener("click", () => {
-    copyAartiDetails(dayNum, houseNo);
   });
 
   return btn;
