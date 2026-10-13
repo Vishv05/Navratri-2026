@@ -17,7 +17,12 @@ import {
   formatPhoneDisplay 
 } from "./data.js";
 import { firebaseConfig, FIRESTORE_SETTINGS, COMMITTEE_CONFIG } from "./firebase-config.js";
-import { WHATSAPP_CONFIG } from "./whatsapp-config.js";
+export const WHATSAPP_CONFIG = {
+  TOKEN: "EAApSi8hlkDUBSmURbUsVRhpVe1oaZCWaj1SHV9jiIVXfLAinGZC0GSbmx35Hv7VRlJehBAVMscChWAKwRejdwnZBc1bx3SsjElwytPmZCBjTgZAvlrSEhT0qx0nkWgFKPJtuBOkngFyLTSlwWhaPldPhVzdOJPINxl60HI5JNKZAtAygmS3IvE72EuBo20ITJRmW0j8vVDpY3D6StBStapCWZAvEYLSxuWQ9OflGmFZCMZBlLC9hAXZCXZC8TZAy6ZAXYqZAj0D56a2r0h6iUH1eFY6tYh4Rzd",
+  PHONE_NUMBER_ID: "1296935796847222",
+  TEMPLATE_NAME: "navratri_invitation",
+  TEMPLATE_LANG: "en"
+};
 
 // Official Firebase CDN Modular imports (ES Modules)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
@@ -453,7 +458,6 @@ async function sendWhatsAppViaBackend(dayNum, houseNo) {
   if (!houseNo) return;
   const rawContact = getHouseContacts(houseNo) || HOUSE_CONTACTS[houseNo];
   const phones = extractPhoneNumbers(rawContact);
-  const message = buildSmsMessage(dayNum, houseNo);
   const primaryPhone = phones.length > 0 ? phones[0] : null;
 
   if (!primaryPhone) {
@@ -463,91 +467,76 @@ async function sendWhatsAppViaBackend(dayNum, houseNo) {
 
   showToast(`🚀 મકાન નં. ${houseNo} (+${primaryPhone}) પર Business WhatsApp મોકલાઈ રહ્યો છે...`, "info");
 
-  let sent = false;
+  const dayData = SCHEDULE.find(d => Number(d.dayNum) === Number(dayNum)) || SCHEDULE[0];
+  const cleanDigits = String(primaryPhone).replace(/[^0-9]/g, "");
+  const cleanPhone = cleanDigits.length === 10 ? `91${cleanDigits}` : cleanDigits;
 
-  // 1. Try local Node backend first (when running on localhost)
-  try {
-    const res = await fetch('/api/send-whatsapp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dayNum, houseNo, phone: primaryPhone, message, channel: 'whatsapp' })
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success) {
-        sent = true;
-        if (data.simulated) {
-          showToast(`💬 [Sandbox] મકાન નં. ${houseNo} માટે WhatsApp તૈયાર!`, "info");
-        } else {
-          showToast(`✅ મકાન નં. ${houseNo} પર Business WhatsApp સફળતાપૂર્વક મોકલાઈ ગયું! 🪔`, "success");
+  const payload = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: cleanPhone,
+    type: 'template',
+    template: {
+      name: WHATSAPP_CONFIG.TEMPLATE_NAME || 'navratri_invitation',
+      language: { code: WHATSAPP_CONFIG.TEMPLATE_LANG || 'en' },
+      components: [
+        {
+          type: 'body',
+          parameters: [
+            { type: 'text', text: houseNo || 'Member' },
+            { type: 'text', text: dayData.norata },
+            { type: 'text', text: dayData.dateStr }
+          ]
+        }
+      ]
+    }
+  };
+
+  const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+  // If running locally, optionally try local Node backend first
+  if (isLocal) {
+    try {
+      const res = await fetch('/api/send-whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dayNum, houseNo, phone: primaryPhone, channel: 'whatsapp' })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          showToast(`✅ મકાન નં. ${houseNo} પર WhatsApp મોકલાઈ ગયું! 🪔`, "success");
+          return;
         }
       }
-    }
-  } catch (e) {
-    // Local server not available, fall back to direct Cloud API
+    } catch (e) {}
   }
 
-  // 2. Direct Meta Graph API call (Works directly on Live Firebase Hosting URL!)
-  const activeToken = (typeof localStorage !== "undefined" && localStorage.getItem("meta_wa_token")) || (WHATSAPP_CONFIG && WHATSAPP_CONFIG.TOKEN);
-  if (!sent && activeToken) {
-    try {
-      const dayData = SCHEDULE.find(d => d.dayNum === dayNum) || SCHEDULE[0];
-      const cleanDigits = String(primaryPhone).replace(/[^0-9]/g, "");
-      const cleanPhone = cleanDigits.length === 10 ? `91${cleanDigits}` : cleanDigits;
+  // Direct Meta WhatsApp Cloud API call (Runs instantly on Firebase Hosting URL)
+  try {
+    const phoneNumberId = WHATSAPP_CONFIG.PHONE_NUMBER_ID || '1296935796847222';
+    const res = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${WHATSAPP_CONFIG.TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
 
-      let payload;
-      if (WHATSAPP_CONFIG && WHATSAPP_CONFIG.TEMPLATE_NAME) {
-        payload = {
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: cleanPhone,
-          type: 'template',
-          template: {
-            name: WHATSAPP_CONFIG.TEMPLATE_NAME,
-            language: { code: WHATSAPP_CONFIG.TEMPLATE_LANG || 'en' },
-            components: [
-              {
-                type: 'body',
-                parameters: [
-                  { type: 'text', text: houseNo || 'Member' },
-                  { type: 'text', text: dayData.norata },
-                  { type: 'text', text: dayData.dateStr }
-                ]
-              }
-            ]
-          }
-        };
-      } else {
-        payload = {
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: cleanPhone,
-          type: 'text',
-          text: { preview_url: false, body: message }
-        };
-      }
+    const data = await res.json();
+    console.log(`[Meta WhatsApp Response for House ${houseNo} (+${cleanPhone})]:`, data);
 
-      const phoneNumberId = (WHATSAPP_CONFIG && WHATSAPP_CONFIG.PHONE_NUMBER_ID) || "1296935796847222";
-      const res = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${activeToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (res.ok && data.messages) {
-        showToast(`✅ મકાન નં. ${houseNo} પર Business WhatsApp સફળતાપૂર્વક મોકલાઈ ગયું! 🪔`, "success");
-      } else {
-        const errMsg = data.error?.message || 'Meta API ભૂલ';
-        showToast(`⚠️ WhatsApp: ${errMsg}`, "error");
-      }
-    } catch (err) {
-      showToast(`⚠️ WhatsApp મોકલવામાં ક્ષતિ આવી: ${err.message}`, "error");
+    if (res.ok && data.messages) {
+      showToast(`✅ મકાન નં. ${houseNo} પર Business WhatsApp સફળતાપૂર્વક મોકલાઈ ગયું! 🪔`, "success");
+    } else {
+      const errMsg = data.error?.message || 'Meta API ભૂલ';
+      console.error('Meta API error:', data.error);
+      showToast(`⚠️ WhatsApp (${houseNo}): ${errMsg}`, "error");
     }
-  } else if (!sent) {
-    showToast(`ℹ️ WhatsApp: મોકલવા માટે Meta API Access Token જરૂરી છે.`, "info");
+  } catch (err) {
+    console.error('WhatsApp network error:', err);
+    showToast(`⚠️ WhatsApp મોકલવામાં ક્ષતિ: ${err.message}`, "error");
   }
 
   // If house has 2 phone numbers, send to number 2 as well
@@ -555,13 +544,22 @@ async function sendWhatsAppViaBackend(dayNum, houseNo) {
     const secondPhone = phones[1];
     setTimeout(async () => {
       try {
-        await fetch('/api/send-whatsapp', {
+        const cleanDigits2 = String(secondPhone).replace(/[^0-9]/g, "");
+        const cleanPhone2 = cleanDigits2.length === 10 ? `91${cleanDigits2}` : cleanDigits2;
+        const payload2 = {
+          ...payload,
+          to: cleanPhone2
+        };
+        await fetch(`https://graph.facebook.com/v21.0/${WHATSAPP_CONFIG.PHONE_NUMBER_ID}/messages`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dayNum, houseNo, phone: secondPhone, message, channel: 'whatsapp' })
+          headers: {
+            'Authorization': `Bearer ${WHATSAPP_CONFIG.TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload2)
         });
       } catch (e) {}
-    }, 1200);
+    }, 1500);
   }
 }
 
