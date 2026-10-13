@@ -173,7 +173,7 @@ async function sendWhatsAppViaMeta({ phone, message, houseNo, dayNum }) {
   }
 
   // Live Meta Graph API call
-  const url = `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`;
+  const url = `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`;
 
   // Schedule metadata for template parameters
   const SCHEDULE_META = [
@@ -200,7 +200,7 @@ async function sendWhatsAppViaMeta({ phone, message, houseNo, dayNum }) {
       type: 'template',
       template: {
         name: config.WHATSAPP_TEMPLATE_NAME,
-        language: { code: config.WHATSAPP_TEMPLATE_LANG || 'en_US' },
+        language: { code: config.WHATSAPP_TEMPLATE_LANG || 'en' },
         components: [
           {
             type: 'body',
@@ -280,12 +280,12 @@ const server = http.createServer((req, res) => {
         const payload = JSON.parse(body || '{}');
         const { phone, message, houseNo, dayNum, channel } = payload;
 
-        if (!phone || !message) {
+        if (!phone) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ 
             success: false, 
             error: 'MISSING_FIELDS', 
-            message: 'Phone and message are required.' 
+            message: 'Phone is required.' 
           }));
           return;
         }

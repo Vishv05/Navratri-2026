@@ -18,7 +18,7 @@ import {
 } from "./data.js";
 import { firebaseConfig, FIRESTORE_SETTINGS, COMMITTEE_CONFIG } from "./firebase-config.js";
 export const WHATSAPP_CONFIG = {
-  TOKEN: "EAApSi8hlkDUBSmURbUsVRhpVe1oaZCWaj1SHV9jiIVXfLAinGZC0GSbmx35Hv7VRlJehBAVMscChWAKwRejdwnZBc1bx3SsjElwytPmZCBjTgZAvlrSEhT0qx0nkWgFKPJtuBOkngFyLTSlwWhaPldPhVzdOJPINxl60HI5JNKZAtAygmS3IvE72EuBo20ITJRmW0j8vVDpY3D6StBStapCWZAvEYLSxuWQ9OflGmFZCMZBlLC9hAXZCXZC8TZAy6ZAXYqZAj0D56a2r0h6iUH1eFY6tYh4Rzd",
+  TOKEN: (typeof localStorage !== "undefined" && localStorage.getItem("meta_wa_token")) || "EAApSi8hlkDUBSsgnmKjZC5ZAZCIjWiNUxwZCnOsAnNnXB4JKlv2hzmjseUFsnY9fGbfblR2D2ZAI5HzRUO0CAGhOmRfPrV879ZAznLuurXYAVBOO5GC55no3WGtNmTBFHi2ZBZA0dyWmFOw3FftY6hCn3tAg6ZC7puTC6EJQKKLDUmDkXm0P3tEnkdTCLqgVKoiiToDQJHBMSd66alWf8zvg3h5pzWvtTPqX9IhtNJZA5xmFkImiEZA3amX0VQdQjqdoYZCZCk3W3fCt5u40jhAZBZAdNk7zfBa",
   PHONE_NUMBER_ID: "1296935796847222",
   TEMPLATE_NAME: "navratri_invitation",
   TEMPLATE_LANG: "en"
@@ -500,7 +500,7 @@ async function sendWhatsAppViaBackend(dayNum, houseNo) {
       const res = await fetch('/api/send-whatsapp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dayNum, houseNo, phone: primaryPhone, channel: 'whatsapp' })
+        body: JSON.stringify({ dayNum, houseNo, phone: primaryPhone, message: buildSmsMessage(dayNum, houseNo), channel: 'whatsapp' })
       });
       if (res.ok) {
         const data = await res.json();
