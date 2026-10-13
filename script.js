@@ -472,26 +472,30 @@ async function sendWhatsAppViaBackend(dayNum, houseNo) {
   const cleanDigits = String(primaryPhone).replace(/[^0-9]/g, "");
   const cleanPhone = cleanDigits.length === 10 ? `91${cleanDigits}` : cleanDigits;
 
-  const payload = {
-    messaging_product: 'whatsapp',
-    recipient_type: 'individual',
-    to: cleanPhone,
-    type: 'template',
-    template: {
-      name: WHATSAPP_CONFIG.TEMPLATE_NAME || 'navratri_invitation',
-      language: { code: WHATSAPP_CONFIG.TEMPLATE_LANG || 'en' },
-      components: [
-        {
-          type: 'body',
-          parameters: [
-            { type: 'text', text: houseNo || 'Member' },
-            { type: 'text', text: dayData.norata },
-            { type: 'text', text: dayData.dateStr }
-          ]
-        }
-      ]
-    }
-  };
+    const fullDateText = dayData.dayName 
+      ? `${dayData.dateStr} (${dayData.dayName.split(' ')[0]})` 
+      : (dayData.dateStr || "11 Oct 2026");
+
+    const payload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: cleanPhone,
+      type: 'template',
+      template: {
+        name: WHATSAPP_CONFIG.TEMPLATE_NAME || 'navratri_invitation',
+        language: { code: WHATSAPP_CONFIG.TEMPLATE_LANG || 'en' },
+        components: [
+          {
+            type: 'body',
+            parameters: [
+              { type: 'text', text: houseNo || 'Member' },
+              { type: 'text', text: dayData.norata },
+              { type: 'text', text: fullDateText }
+            ]
+          }
+        ]
+      }
+    };
 
   const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
